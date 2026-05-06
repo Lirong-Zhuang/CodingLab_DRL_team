@@ -121,7 +121,7 @@ class DQN_v0:
 
 
 
-# DQN network with pytorch
+# DQN network with pytorch baseline
 class DQN_v1:
     def __init__(self, env):
         self.env = env
@@ -140,13 +140,13 @@ class DQN_v1:
 
         # Hyperparameters
         self.episode_steps = self.env.episode_steps
-        self.num_episodes = 500
-        self.batch_size = 32
-        self.gamma = 0.99
-        self.learning_rate = 0.001
+        self.num_episodes = 10000
+        self.batch_size = 64
+        self.gamma = 0.95
+        self.learning_rate = 5e-4
         self.epsilon_start = 0.5
         self.epsilon_end = 0.05
-        self.epsilon_decay_steps = self.num_episodes
+        self.epsilon_decay_steps = self.num_episodes / 2
         self.epsilon = self.epsilon_start
         self.target_update_freq = 10
 
@@ -233,3 +233,116 @@ class DQN_v1:
         torch.save(self.q_network.state_dict(), model_path)
     
   
+# agressive DQN
+class DQN_v2:
+    def __init__(self, env):
+        self.env = env
+        self.variant = self.env.variant
+        self.data_dir = self.env.data_dir
+        self.file_name = f'DQN_v2.'
+        self.network_name = 'DQN Network (Version 2)'
+
+        initial_obs = self.env.reset('training')  # get initial obs 
+        self.obs_dim = len(initial_obs)
+        self.act_dim = 5  # number of actions: 0 (nothing), 1 (up), 2 (right), 3 (down), 4 (left)
+
+        # Device configuration
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f'Using device: {self.device}')
+
+        # Hyperparameters
+        self.episode_steps = self.env.episode_steps
+        self.num_episodes = 5000
+        self.batch_size = 256
+        self.gamma = 0.99
+        self.learning_rate = 3e-4
+        self.epsilon_start = 0.9
+        self.epsilon_end = 0.02
+        self.epsilon_decay_steps = int(self.num_episodes * 0.7)
+        self.epsilon = self.epsilon_start
+        self.target_update_freq = 10
+
+        # replay buffer parameters
+        self.replay_buffer_capacity = 100000
+        self.min_replay_buffer_size = 5000
+        self.replay_buffer = []  # initialize replay buffer as empty list
+
+        self.q_network = self.build_q_network().to(self.device)
+        self.target_network = self.build_q_network().to(self.device)
+        self.target_network.load_state_dict(self.q_network.state_dict())
+        self.target_network.eval()
+
+        self.optimizer = optim.AdamW(self.q_network.parameters(), lr=self.learning_rate, weight_decay=1e-4) # L2 regularization
+        self.loss_fn = nn.SmoothL1Loss()
+
+    def build_q_network(self):
+        network = nn.Sequential(
+            nn.Linear(self.obs_dim, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.act_dim)
+        )
+        return network
+    
+    def select_action(self, obs):
+        if np.random.rand() < self.epsilon:
+            return np.random.randint(self.act_dim)  # explore -> select random action
+        else:
+            obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                q_values = self.q_network(obs_tensor)
+            act = torch.argmax(q_values).item()
+            return int(act)
+        
+    def optimize_model(self):
+        # sample a batch of transitions from the replay buffer
+        batch = random.sample(self.replay_buffer, self.batch_size)
+        obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = zip(*batch)
+
+        obs_batch = torch.FloatTensor(obs_batch).to(self.device)
+        act_batch = torch.LongTensor(act_batch).to(self.device)
+        rew_batch = torch.FloatTensor(rew_batch).to(self.device)
+        next_obs_batch = torch.FloatTensor(next_obs_batch).to(self.device)
+        done_batch = torch.FloatTensor(done_batch).to(self.device)
+
+        # compute target Q-values using the target network
+        target_q_values_next = self.target_network(next_obs_batch)
+        max_target_q_values_next = target_q_values_next.max(dim=1)[0]
+        target_q_values = rew_batch + (1 - done_batch) * self.gamma * max_target_q_values_next
+
+        q_values = self.q_network(obs_batch)
+        action_masks = torch.nn.functional.one_hot(act_batch, num_classes=self.act_dim)
+        q_values_for_actions = (q_values * action_masks).sum(dim=1)
+
+        loss = self.loss_fn(q_values_for_actions, target_q_values.detach())
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 10.0)
+        self.optimizer.step()
+
+        return loss.item()
+    
+    def store_transition(self, obs, act, rew, next_obs, done):
+        if len(self.replay_buffer) >= self.replay_buffer_capacity:
+            self.replay_buffer.pop(0)
+
+        self.replay_buffer.append((obs, act, rew, next_obs, done))
+
+    def ready_to_update(self):
+        return len(self.replay_buffer) >= self.min_replay_buffer_size
+    
+    def update_after_episode(self, episode):
+        if episode % self.target_update_freq == 0:
+            self.target_network.load_state_dict(self.q_network.state_dict())
+
+        decay = (self.epsilon_start - self.epsilon_end) / self.epsilon_decay_steps
+        self.epsilon = max(self.epsilon_end, self.epsilon - decay)
+
+    def save(self, model_path):
+        torch.save(self.q_network.state_dict(), model_path)

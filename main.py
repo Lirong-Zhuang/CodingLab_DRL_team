@@ -1,6 +1,6 @@
 import time
 from torch.utils.tensorboard import SummaryWriter
-from dqn import DQN_v0, DQN_v1
+from dqn import DQN_v0, DQN_v1, DQN_v2
 # TODO: parse arguments
 import argparse
 
@@ -70,20 +70,20 @@ def validate(env, network, num_validation_episodes):
 # train function
 def train(env, network_class):
 
-    model_version = 3
+    model_version = 6
 
     start_time = time.time()
     train_rew = 0  # initialize reward tracking
     network = network_class(env)
     num_episodes = network.num_episodes
-    output_interval = 10
+    output_interval = 20
 
     # print info
     print(f'Training {network.network_name} on Variant {env.variant}')
 
     # validation info
-    vali_interval = 50 
-    num_validation_episodes = 10 # validation episodes in each validation phase
+    vali_interval = 100
+    num_validation_episodes = 20 # validation episodes in each validation phase
 
     # tensor-board writer
     run_name = f'{network.file_name}{model_version}_variant_{env.variant}'
@@ -118,8 +118,20 @@ def train(env, network_class):
         # run algorithm-specific end-of-episode updates
         network.update_after_episode(episode)
 
+        # print training progress
         if (episode + 1) % output_interval == 0:
-            print(f'Episode {episode + 1}/{num_episodes}, Reward: {episode_reward}')
+
+            elapsed_time = time.time() - start_time
+            episodes_done = episode + 1
+            avg_time_per_episode = elapsed_time / episodes_done
+            remaining_episodes = num_episodes - episodes_done
+            estimated_remaining_time = avg_time_per_episode * remaining_episodes
+
+            remaining_hours = estimated_remaining_time // 3600
+            remaining_minutes = (estimated_remaining_time % 3600) // 60
+            remaining_seconds = estimated_remaining_time % 60
+
+            print(f'Episode {episode + 1}/{num_episodes}, Reward: {episode_reward}, Remaining Time: {remaining_hours:.0f}h {remaining_minutes:.0f}min {remaining_seconds:.2f}s')
 
         train_rew += episode_reward
         writer.add_scalar('Reward/train', episode_reward, episode + 1)
