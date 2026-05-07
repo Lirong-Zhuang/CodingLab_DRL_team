@@ -1,6 +1,6 @@
 import time
 from torch.utils.tensorboard import SummaryWriter
-from dqn import DQN_v0, DQN_v1, DQN_v2
+from dqn import DQN_v0, DQN_v1, DQN_v2, DQN_v3
 # TODO: parse arguments
 import argparse
 
@@ -70,7 +70,7 @@ def validate(env, network, num_validation_episodes):
 # train function
 def train(env, network_class):
 
-    model_version = 6
+    model_version = 4
 
     start_time = time.time()
     train_rew = 0  # initialize reward tracking
@@ -78,12 +78,16 @@ def train(env, network_class):
     num_episodes = network.num_episodes
     output_interval = 20
 
+    # best model tracking
+    model_path = os.path.join(model_dir, f'{network.file_name}{model_version}_variant_{env.variant}.pt')
+    best_vali_rew = -float('inf')
+
     # print info
     print(f'Training {network.network_name} on Variant {env.variant}')
 
     # validation info
     vali_interval = 100
-    num_validation_episodes = 20 # validation episodes in each validation phase
+    num_validation_episodes = 100 # validation episodes in each validation phase
 
     # tensor-board writer
     run_name = f'{network.file_name}{model_version}_variant_{env.variant}'
@@ -146,10 +150,12 @@ def train(env, network_class):
             print(f'End of validation, Average Validation Reward: {avg_vali_rew}')
             writer.add_scalar('Reward/validation', avg_vali_rew, episode + 1)
 
-    # save the trained model
-    model_path = os.path.join(model_dir, f'{network.file_name}{model_version}_variant_{env.variant}.pt')
-    network.save(model_path)
-    avg_rew = train_rew / num_episodes
+            # save model if it is the best so far
+            if avg_vali_rew > best_vali_rew:
+                best_vali_rew = avg_vali_rew
+                network.save(model_path)
+                print(f'New best model saved with average validation reward: {best_vali_rew}')
+
 
     # compute training time
     end_time = time.time()
@@ -159,12 +165,12 @@ def train(env, network_class):
     seconds = training_time % 60
 
     # print results
-    print(f'Model saved to {model_path}, Average Reward: {avg_rew}, Training Time: {hours:.0f}h {minutes:.0f}min {seconds:.2f}s')
+    print(f'Training completed, model has been saved with best validation reward: {best_vali_rew}. Training Time: {hours:.0f}h {minutes:.0f}min {seconds:.2f}s')
     writer.add_text('Result/ModelPath', model_path)
     writer.close()
 
 # TODO: execute training
 if __name__ == '__main__':
-    train(env, network_class=DQN_v1)
+    train(env, network_class=DQN_v3)
 
 
