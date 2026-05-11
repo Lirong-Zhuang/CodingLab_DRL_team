@@ -70,7 +70,7 @@ def validate(env, network, num_validation_episodes):
 # train function
 def train(env, network_class):
 
-    model_version = 4
+    model_version = 1
 
     start_time = time.time()
     train_rew = 0  # initialize reward tracking
@@ -171,6 +171,6 @@ def train(env, network_class):
 
 # TODO: execute training
 if __name__ == '__main__':
-    train(env, network_class=DQN_v3)
+    train(env, network_class=DQN_v0)
 
 

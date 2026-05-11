@@ -145,11 +145,12 @@ class Environment(object):
 
     # TODO: implement function that gives the input features for the neural network(s)
     #       based on the current state of the environment
-    # Using one-hot and multi-hot to realize the fixed input size. Dimension of obs is 77. Numbers are normalized
+    # Using one-hot and multi-hot to realize the fixed input size. Dimension of obs is 54. Numbers are normalized
     def get_obs(self):
         
-        agent_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
-        agent_loc_obs[self.agent_loc[0] * self.horizontal_cell_count + self.agent_loc[1]] = 1
+        # agent_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
+        # agent_loc_obs[self.agent_loc[0] * self.horizontal_cell_count + self.agent_loc[1]] = 1
+        agent_loc_obs = [self.agent_loc[0] / self.vertical_cell_count, self.agent_loc[1] / self.horizontal_cell_count]
 
         item_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
         item_times_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
