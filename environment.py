@@ -148,9 +148,9 @@ class Environment(object):
     # Using one-hot and multi-hot to realize the fixed input size. Dimension of obs is 54. Numbers are normalized
     def get_obs(self):
         
-        # agent_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
+        # agent_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count # 25-dimensional one-hot agent location as input
         # agent_loc_obs[self.agent_loc[0] * self.horizontal_cell_count + self.agent_loc[1]] = 1
-        agent_loc_obs = [self.agent_loc[0] / self.vertical_cell_count, self.agent_loc[1] / self.horizontal_cell_count]
+        agent_loc_obs = [self.agent_loc[0] / self.vertical_cell_count, self.agent_loc[1] / self.horizontal_cell_count]  # 2-dimensional agent location as input 
 
         item_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
         item_times_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
