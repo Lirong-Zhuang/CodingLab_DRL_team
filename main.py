@@ -1,6 +1,6 @@
 import time
 from torch.utils.tensorboard import SummaryWriter
-from dqn import DQN_v0, DQN_v1, DQN_v2, DQN_v3
+import dqn
 # TODO: parse arguments
 import argparse
 
@@ -68,15 +68,17 @@ def validate(env, network, num_validation_episodes):
     return avg_reward
 
 # train function
-def train(env, network_class):
+def train(env):
 
-    # Version Information
-    model_version = 9
-    note = "Architecture: 54 64 64 5"
+    ##--------Version Information--------##
+    network = dqn.DQN_v4(env)
+    model_version = 3
+    # note = "Architecture: 54 64 64 5"
+    note = "N/A"
+    ##----------------------------------##
 
     start_time = time.time()
     train_rew = 0  # initialize reward tracking
-    network = network_class(env)
     num_episodes = network.num_episodes
     output_interval = 20
 
@@ -91,10 +93,17 @@ def train(env, network_class):
     vali_interval = 100
     num_validation_episodes = 100 # validation episodes in each validation phase
 
-    # tensor-board writer
+    # file protection
     run_name = f'{network.file_name}{model_version}_variant_{env.variant}'
-    writer = SummaryWriter(log_dir=f'./logs/{run_name}')
+    log_dir = f'./logs/{run_name}'
+    if os.path.exists(model_path) or os.path.exists(log_dir):
+        raise FileExistsError(
+            f'Model name already exists: {run_name}. '
+            f'Please increase model_version before training.'
+        )
 
+    # tensor-board writer
+    writer = SummaryWriter(log_dir=log_dir)
     writer.add_text('Hyperparameters', f'num_episodes: {network.num_episodes}, batch_size: {network.batch_size}, gamma: {network.gamma}, learning_rate: {network.learning_rate}, epsilon_start: {network.epsilon_start}, epsilon_end: {network.epsilon_end}, epsilon_decay_steps: {network.epsilon_decay_steps}, target_update_freq: {network.target_update_freq}', 0)
     writer.add_text('Model_info', f'Model: {run_name}, Variant: {env.variant}', 0)
     writer.add_text('Note', note, 0)
@@ -174,6 +183,6 @@ def train(env, network_class):
 
 # TODO: execute training
 if __name__ == '__main__':
-    train(env, network_class=DQN_v3)
+    train(env)
 
 
