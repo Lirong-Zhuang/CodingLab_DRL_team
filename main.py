@@ -70,7 +70,9 @@ def validate(env, network, num_validation_episodes):
 # train function
 def train(env, network_class):
 
-    model_version = 11
+    # Version Information
+    model_version = 9
+    note = "Architecture: 54 64 64 5"
 
     start_time = time.time()
     train_rew = 0  # initialize reward tracking
@@ -93,8 +95,9 @@ def train(env, network_class):
     run_name = f'{network.file_name}{model_version}_variant_{env.variant}'
     writer = SummaryWriter(log_dir=f'./logs/{run_name}')
 
-    writer.add_text('hyperparameters', f'num_episodes: {network.num_episodes}, batch_size: {network.batch_size}, gamma: {network.gamma}, learning_rate: {network.learning_rate}, epsilon_start: {network.epsilon_start}, epsilon_end: {network.epsilon_end}, epsilon_decay_steps: {network.epsilon_decay_steps}, target_update_freq: {network.target_update_freq}', 0)
-    writer.add_text('model_info', f'Model: {run_name}, Variant: {env.variant}', 0)
+    writer.add_text('Hyperparameters', f'num_episodes: {network.num_episodes}, batch_size: {network.batch_size}, gamma: {network.gamma}, learning_rate: {network.learning_rate}, epsilon_start: {network.epsilon_start}, epsilon_end: {network.epsilon_end}, epsilon_decay_steps: {network.epsilon_decay_steps}, target_update_freq: {network.target_update_freq}', 0)
+    writer.add_text('Model_info', f'Model: {run_name}, Variant: {env.variant}', 0)
+    writer.add_text('Note', note, 0)
 
     # running
     for episode in range(num_episodes):
@@ -171,6 +174,6 @@ def train(env, network_class):
 
 # TODO: execute training
 if __name__ == '__main__':
-    train(env, network_class=DQN_v1)
+    train(env, network_class=DQN_v3)
 
 

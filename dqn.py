@@ -371,7 +371,7 @@ class DQN_v3:
         self.num_episodes = 10000
         self.batch_size = 64
         self.gamma = 0.8
-        self.learning_rate = 5e-4
+        self.learning_rate = 5e-5
         self.epsilon_start = 0.5
         self.epsilon_end = 0.05
         self.epsilon_decay_steps = self.num_episodes / 2
@@ -394,8 +394,6 @@ class DQN_v3:
     def build_q_network(self):
         network = nn.Sequential(
             nn.Linear(self.obs_dim, 64),
-            nn.ReLU(),
-            nn.Linear(64, 64),
             nn.ReLU(),
             nn.Linear(64, 64),
             nn.ReLU(),
