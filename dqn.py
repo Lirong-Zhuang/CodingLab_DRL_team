@@ -35,6 +35,45 @@ class DuelingQNetwork(nn.Module):
         return value + advantage - advantage.mean(dim=1, keepdim=True)
 
 
+class PrioritizedReplayBuffer:
+    def __init__(self, capacity, alpha=0.6):
+        self.capacity = capacity
+        self.alpha = alpha
+        self.buffer = []
+        self.priorities = []
+        self.pos = 0
+
+    def add(self, transition):
+        max_priority = max(self.priorities, default=1.0)
+
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(transition)
+            self.priorities.append(max_priority)
+        else:
+            self.buffer[self.pos] = transition
+            self.priorities[self.pos] = max_priority
+            self.pos = (self.pos + 1) % self.capacity
+
+    def sample(self, batch_size, beta=0.4):
+        priorities = np.array(self.priorities, dtype=np.float32)
+        probs = priorities ** self.alpha
+        probs /= probs.sum()
+
+        indices = np.random.choice(len(self.buffer), batch_size, p=probs)
+        samples = [self.buffer[i] for i in indices]
+
+        weights = (len(self.buffer) * probs[indices]) ** (-beta)
+        weights /= weights.max()
+
+        return samples, indices, weights
+
+    def update_priorities(self, indices, priorities):
+        for idx, priority in zip(indices, priorities):
+            self.priorities[idx] = float(priority)
+
+    def __len__(self):
+        return len(self.buffer)
+
 
 # DQN Demo with Tensorflow, can be used to check CPU training and set up
 class DQN_v0:
@@ -511,11 +550,11 @@ class DQN_v4:
         self.episode_steps = self.env.episode_steps
         self.num_episodes = 10000
         self.batch_size = 64
-        self.gamma = 0.8
+        self.gamma = 0.9
         self.learning_rate = 5e-5
-        self.epsilon_start = 0.5
+        self.epsilon_start = 1.0
         self.epsilon_end = 0.05
-        self.epsilon_decay_steps = self.num_episodes / 2
+        self.epsilon_decay_steps = self.num_episodes * 0.8
         self.epsilon = self.epsilon_start
         self.target_update_freq = 10
 
@@ -694,6 +733,162 @@ class DQN_v5:
             self.replay_buffer.pop(0)
 
         self.replay_buffer.append((obs, act, rew, next_obs, done))
+
+    def ready_to_update(self):
+        return len(self.replay_buffer) >= self.min_replay_buffer_size
+    
+    def update_after_episode(self, episode):
+        if episode % self.target_update_freq == 0:
+            self.target_network.load_state_dict(self.q_network.state_dict())
+
+        self.epsilon = max(
+            self.epsilon_end,
+            self.epsilon - (self.epsilon_start - self.epsilon_end) / self.epsilon_decay_steps
+        )
+
+    def save(self, model_path):
+        torch.save(self.q_network.state_dict(), model_path)
+
+
+
+
+# light rainbow DQN
+class DQN_v6:
+    def __init__(self, env):
+        self.env = env
+        self.variant = self.env.variant
+        self.data_dir = self.env.data_dir
+        self.file_name = f'DQN_v6.'
+        self.network_name = 'Rainbow DQN Network (Version 6)'
+        self.training_step = 0
+
+        initial_obs = self.env.reset('training')  # get initial obs 
+        self.obs_dim = len(initial_obs)
+        self.act_dim = 5  # number of actions: 0 (nothing), 1 (up), 2 (right), 3 (down), 4 (left)
+
+        # Device configuration
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f'Using device: {self.device}')
+
+        # Hyperparameters
+        self.episode_steps = self.env.episode_steps
+        self.num_episodes = 10000
+        self.batch_size = 64
+        self.gamma = 0.9
+        self.learning_rate = 5e-5
+        self.epsilon_start = 1.0
+        self.epsilon_end = 0.05
+        self.epsilon_decay_steps = self.num_episodes * 0.8
+        self.epsilon = self.epsilon_start
+        self.target_update_freq = 10
+
+        self.n_step = 3
+        self.n_step_buffer = []
+
+        # replay buffer parameters
+        self.replay_buffer_capacity = 50000
+        self.min_replay_buffer_size = 1000
+        self.per_alpha = 0.6
+        self.per_beta_start = 0.4
+        self.per_beta_end = 1.0
+        self.per_beta = self.per_beta_start
+        self.replay_buffer = PrioritizedReplayBuffer(self.replay_buffer_capacity, self.per_alpha)
+
+        self.q_network = self.build_q_network().to(self.device)
+        self.target_network = self.build_q_network().to(self.device)
+        self.target_network.load_state_dict(self.q_network.state_dict())
+        self.target_network.eval()
+
+        self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
+        self.loss_fn = nn.SmoothL1Loss(reduction='none')
+
+    def build_q_network(self):
+        network = DuelingQNetwork(self.obs_dim, self.act_dim)
+        return network
+    
+    def select_action(self, obs):
+        if np.random.rand() < self.epsilon:
+            return np.random.randint(self.act_dim)  # explore -> select random action
+        else:
+            obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                q_values = self.q_network(obs_tensor)
+            act = torch.argmax(q_values).item()
+            return int(act)
+        
+    def optimize_model(self):
+        beta_progress = min(1.0, self.training_step / (self.num_episodes * self.episode_steps))
+        self.per_beta = self.per_beta_start + beta_progress * (self.per_beta_end - self.per_beta_start)
+
+        batch, indices, weights = self.replay_buffer.sample(self.batch_size, beta=self.per_beta)
+        obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = zip(*batch)
+
+        obs_batch = torch.FloatTensor(obs_batch).to(self.device)
+        act_batch = torch.LongTensor(act_batch).to(self.device)
+        rew_batch = torch.FloatTensor(rew_batch).to(self.device)
+        next_obs_batch = torch.FloatTensor(next_obs_batch).to(self.device)
+        done_batch = torch.FloatTensor(done_batch).to(self.device)
+        weights = torch.FloatTensor(weights).to(self.device)
+
+        with torch.no_grad():
+            next_q_values_online = self.q_network(next_obs_batch)
+            next_actions = next_q_values_online.argmax(dim=1)
+
+            next_q_values_target = self.target_network(next_obs_batch)
+            max_target_q_values_next = next_q_values_target.gather(
+                1,
+                next_actions.unsqueeze(1)
+            ).squeeze(1)
+
+            target_q_values = rew_batch + (1 - done_batch) * (self.gamma ** self.n_step) * max_target_q_values_next
+
+        q_values = self.q_network(obs_batch)
+        q_values_for_actions = q_values.gather(1, act_batch.unsqueeze(1)).squeeze(1)
+
+        td_errors = target_q_values - q_values_for_actions
+        losses = self.loss_fn(q_values_for_actions, target_q_values)
+        loss = (weights * losses).mean()
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 10.0)
+        self.optimizer.step()
+
+        new_priorities = td_errors.detach().abs().cpu().numpy() + 1e-6
+        self.replay_buffer.update_priorities(indices, new_priorities)
+
+        self.training_step += 1
+
+        return loss.item()
+
+        
+    def store_transition(self, obs, act, rew, next_obs, done):
+        self.n_step_buffer.append((obs, act, rew, next_obs, done))
+        
+        if len(self.n_step_buffer) < self.n_step and not done:
+            return  
+        
+        while self.n_step_buffer:
+            discounted_reward = 0
+            final_next_obs = self.n_step_buffer[-1][3]
+            final_done = self.n_step_buffer[-1][4]
+
+            for i, (_, _, reward_i, next_obs_i, done_i) in enumerate(self.n_step_buffer):
+                discounted_reward += (self.gamma ** i) * reward_i
+                final_next_obs = next_obs_i
+                final_done = done_i
+                if i + 1 >= self.n_step or done_i:
+                    break
+
+            obs_0, act_0, _, _, _ = self.n_step_buffer[0]
+            self.replay_buffer.add((obs_0, act_0, discounted_reward, final_next_obs, final_done))
+            self.n_step_buffer.pop(0)
+
+            if not done or len(self.n_step_buffer) < self.n_step:
+                break
+
+        if done:
+            self.n_step_buffer = []
 
     def ready_to_update(self):
         return len(self.replay_buffer) >= self.min_replay_buffer_size

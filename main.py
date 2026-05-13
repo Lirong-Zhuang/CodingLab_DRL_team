@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--variant', type=int, default=0, choices=[0, 1, 2])
-parser.add_argument('--seed', type=int, default=2026) # seed can be any other number
+parser.add_argument('--seed', type=int, default=666) # seed can be any other number
 parser.add_argument('--data_dir', type=str, default='./data')
 
 args = parser.parse_args()
@@ -71,8 +71,8 @@ def validate(env, network, num_validation_episodes):
 def train(env):
 
     ##--------Version Information--------##
-    network = dqn.DQN_v4(env)
-    model_version = 3
+    network = dqn.DQN_v6(env)
+    model_version = 1
     # note = "Architecture: 54 64 64 5"
     note = "N/A"
     ##----------------------------------##

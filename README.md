@@ -40,4 +40,5 @@ python -m pip install torch torchvision torchaudio --index-url https://download.
 python main.py
 
 ## Tensor-Board
+
 tensorboard --logdir logs
