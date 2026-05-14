@@ -774,8 +774,8 @@ class DQN_v6:
         self.episode_steps = self.env.episode_steps
         self.num_episodes = 10000
         self.batch_size = 64
-        self.gamma = 0.9
-        self.learning_rate = 5e-5
+        self.gamma = 0.95
+        self.learning_rate = 1e-4
         self.epsilon_start = 1.0
         self.epsilon_end = 0.05
         self.epsilon_decay_steps = self.num_episodes * 0.8

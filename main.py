@@ -72,7 +72,7 @@ def train(env):
 
     ##--------Version Information--------##
     network = dqn.DQN_v6(env)
-    model_version = 1
+    model_version = 5
     # note = "Architecture: 54 64 64 5"
     note = "N/A"
     ##----------------------------------##
