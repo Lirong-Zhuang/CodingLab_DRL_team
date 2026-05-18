@@ -28,6 +28,12 @@ np.random.seed(seed)
 import tensorflow as tf
 tf.random.set_seed(seed)
 
+import torch
+torch.manual_seed(seed)
+
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 # initialize environment
 from environment import Environment
@@ -72,7 +78,7 @@ def train(env):
 
     ##--------Version Information--------##
     network = dqn.DQN_v6(env)
-    model_version = 7
+    model_version = 11
     # note = "Architecture: 54 64 64 5"
     note = "N/A"
     ##----------------------------------##
