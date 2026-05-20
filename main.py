@@ -71,8 +71,8 @@ def validate(env, network, num_validation_episodes):
 def train(env):
 
     ##--------Version Information--------##
-    network = dqn.DQN_v4(env)
-    model_version = 3
+    network = dqn.DQN_CNN_v2(env)
+    model_version = 1
     # note = "Architecture: 54 64 64 5"
     note = "N/A"
     ##----------------------------------##
