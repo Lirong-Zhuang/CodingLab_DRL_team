@@ -78,9 +78,9 @@ def train(env):
 
     ##--------Version Information--------##
     network = dqn.DQN_v6(env)
-    model_version = 11
+    model_version = 21
     # note = "Architecture: 54 64 64 5"
-    note = "N/A"
+    note = "Advantage stream has 1 hidden layers with 128 neurons"
     ##----------------------------------##
 
     start_time = time.time()

@@ -773,7 +773,7 @@ class DQN_v6:
         # Hyperparameters
         self.episode_steps = self.env.episode_steps
         self.num_episodes = 10000
-        self.batch_size = 128
+        self.batch_size = 64
         self.gamma = 0.95
         self.learning_rate = 5e-5
         self.epsilon_start = 1.0
