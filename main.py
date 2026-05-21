@@ -4,6 +4,7 @@ import dqn
 import ppo
 # TODO: parse arguments
 import argparse
+import rainbow_dqn
 
 parser = argparse.ArgumentParser()
 
@@ -42,8 +43,8 @@ from environment_v2 import Environment_v2
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
-# env = Environment(variant, data_dir)
-env = Environment_v2(variant, data_dir)
+env = Environment(variant, data_dir)
+# env = Environment_v2(variant, data_dir)
 model_dir = './models'
 
 
@@ -51,6 +52,9 @@ model_dir = './models'
 def validate_dqn(env, network, num_validation_episodes):
     old_epsilon = network.epsilon  # save current epsilon value
     network.epsilon = 0  # set epsilon to 0 for validation
+
+    was_training = network.q_network.training
+    network.q_network.eval()
 
     vali_rew = 0
     num_episodes = num_validation_episodes
@@ -73,6 +77,9 @@ def validate_dqn(env, network, num_validation_episodes):
 
     network.epsilon = old_epsilon
 
+    if was_training:
+        network.q_network.train()
+
     avg_reward = vali_rew / num_episodes
     return avg_reward
 
@@ -80,10 +87,10 @@ def validate_dqn(env, network, num_validation_episodes):
 def train_dqn(env):
 
     ##--------Version Information--------##
-    network = dqn.DQN_v6(env)
-    model_version = 2
+    network = rainbow_dqn.DQN_v7(env)
+    model_version = 1
     # note = "Architecture: 54 64 64 5"
-    note = "NA"
+    note = "Test full DQN"
     ##----------------------------------##
 
     start_time = time.time()

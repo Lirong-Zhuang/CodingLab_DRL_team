@@ -159,24 +159,24 @@ class Environment_v2(object):
         target_loc_obs = [self.target_loc[0] / self.vertical_cell_count, self.target_loc[1] / self.horizontal_cell_count]  # 2-dimensional target location as input
 
         # Item locations and remianing times
-        # item_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
-
-        # for item_loc, item_time in zip(self.item_locs, self.item_times):
-        #     idx = item_loc[0] * self.horizontal_cell_count + item_loc[1]
-        #     item_time_left = self.max_response_time - item_time
-        #     item_obs[idx] = item_time_left / self.max_response_time
-
-        item_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
-        item_times_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
+        item_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
 
         for item_loc, item_time in zip(self.item_locs, self.item_times):
             idx = item_loc[0] * self.horizontal_cell_count + item_loc[1]
-            item_loc_obs[idx] = 1
-            item_times_obs[idx] = (self.max_response_time - item_time) / self.max_response_time
+            item_time_left = self.max_response_time - item_time
+            item_obs[idx] = item_time_left / self.max_response_time
+
+        # item_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
+        # item_times_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
+
+        # for item_loc, item_time in zip(self.item_locs, self.item_times):
+        #     idx = item_loc[0] * self.horizontal_cell_count + item_loc[1]
+        #     item_loc_obs[idx] = 1
+        #     item_times_obs[idx] = (self.max_response_time - item_time) / self.max_response_time
 
         # Agent load
         agent_load_obs = [self.agent_load / self.agent_capacity]
 
-        obs = step_count_obs + agent_loc_obs + target_loc_obs + agent_load_obs + item_loc_obs + item_times_obs
+        obs = step_count_obs + agent_loc_obs + target_loc_obs + agent_load_obs + item_obs
 
         return obs
