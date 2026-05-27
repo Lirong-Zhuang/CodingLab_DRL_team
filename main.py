@@ -40,11 +40,14 @@ if torch.cuda.is_available():
 # initialize environment
 from environment import Environment
 from environment_v2 import Environment_v2
+from environment_v3 import Environment_v3
+from environment_v4 import Environment_v4
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
-env = Environment(variant, data_dir)
+# env = Environment(variant, data_dir)
 # env = Environment_v2(variant, data_dir)
+env = Environment_v4(variant, data_dir)
 model_dir = './models'
 
 
@@ -87,8 +90,8 @@ def validate_dqn(env, network, num_validation_episodes):
 def train_dqn(env):
 
     ##--------Version Information--------##
-    network = rainbow_dqn.DQN_v7(env)
-    model_version = 8
+    network = rainbow_dqn.DQN_v8(env)
+    model_version = 2
     # note = "Architecture: 54 64 64 5"
     note = "NA"
     ##----------------------------------##
