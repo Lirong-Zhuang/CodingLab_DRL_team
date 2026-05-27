@@ -50,15 +50,19 @@ class RainbowQNetwork(nn.Module):
         )
 
         self.value_stream = nn.Sequential(
-            NoisyLinear(64, 64),
+            # NoisyLinear(64, 64),
+            nn.Linear(64, 64),
             nn.ReLU(),
-            NoisyLinear(64, num_atoms)
+            # NoisyLinear(64, num_atoms)
+            nn.Linear(64, num_atoms)
         )
 
         self.advantage_stream = nn.Sequential(
-            NoisyLinear(64, 64),
+            # NoisyLinear(64, 64),
+            nn.Linear(64, 64),
             nn.ReLU(),
-            NoisyLinear(64, act_dim * num_atoms)
+            # NoisyLinear(64, act_dim * num_atoms)
+            nn.Linear(64, act_dim * num_atoms)
         )
 
     def forward(self, x):
@@ -341,11 +345,11 @@ class DQN_v7:
         self.delta_z = (self.v_max - self.v_min) / (self.num_atoms - 1)
 
         self.epsilon_start = 1.0
-        self.epsilon_end = 0.05
+        self.epsilon_end = 0.03
         self.epsilon_decay_steps = self.num_episodes * 0.8
         self.epsilon = self.epsilon_start
 
-        self.n_step = 3
+        self.n_step = 1
         self.n_step_buffer = []
 
         # replay buffer parameters

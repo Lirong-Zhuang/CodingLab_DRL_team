@@ -9,7 +9,7 @@ import rainbow_dqn
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--variant', type=int, default=0, choices=[0, 1, 2])
-parser.add_argument('--seed', type=int, default=666) # seed can be any other number
+parser.add_argument('--seed', type=int, default=777) # seed can be any other number
 parser.add_argument('--data_dir', type=str, default='./data')
 
 args = parser.parse_args()
@@ -88,9 +88,9 @@ def train_dqn(env):
 
     ##--------Version Information--------##
     network = rainbow_dqn.DQN_v7(env)
-    model_version = 1
+    model_version = 8
     # note = "Architecture: 54 64 64 5"
-    note = "Test full DQN"
+    note = "NA"
     ##----------------------------------##
 
     start_time = time.time()
