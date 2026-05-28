@@ -42,12 +42,14 @@ from environment import Environment
 from environment_v2 import Environment_v2
 from environment_v3 import Environment_v3
 from environment_v4 import Environment_v4
+from environment_v5 import Environment_v5
+from environment_v6 import Environment_v6
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
 # env = Environment(variant, data_dir)
 # env = Environment_v2(variant, data_dir)
-env = Environment_v4(variant, data_dir)
+env = Environment_v5(variant, data_dir)
 model_dir = './models'
 
 
@@ -91,7 +93,7 @@ def train_dqn(env):
 
     ##--------Version Information--------##
     network = rainbow_dqn.DQN_v8(env)
-    model_version = 2
+    model_version = 3
     # note = "Architecture: 54 64 64 5"
     note = "NA"
     ##----------------------------------##
@@ -114,7 +116,7 @@ def train_dqn(env):
 
     # file protection
     run_name = f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}'
-    log_dir = f'./logs/{run_name}'
+    log_dir = f'./log_variant1/{run_name}'
     if os.path.exists(model_path) or os.path.exists(log_dir):
         raise FileExistsError(
             f'Model name already exists: {run_name}. '
