@@ -146,6 +146,99 @@ class Environment(object):
     # TODO: implement function that gives the input features for the neural network(s)
     #       based on the current state of the environment
     def get_obs(self):
-        ...
+        # Basic normalized information
+        step_count_obs = [self.step_count / self.episode_steps]
 
-        return ...
+        agent_loc_obs = [
+            self.agent_loc[0] / (self.vertical_cell_count - 1),
+            self.agent_loc[1] / (self.horizontal_cell_count - 1)
+        ]
+
+        agent_load_obs = [self.agent_load / self.agent_capacity]
+
+        # Grid-based item information
+        item_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
+        item_times_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
+
+        for item_loc, item_time in zip(self.item_locs, self.item_times):
+            idx = item_loc[0] * self.horizontal_cell_count + item_loc[1]
+            item_loc_obs[idx] = 1
+            item_times_obs[idx] = item_time / self.max_response_time
+
+
+        # New engineered features
+
+        max_grid_distance = (
+                self.vertical_cell_count - 1
+                + self.horizontal_cell_count - 1
+        )
+
+        # Distance from agent to target
+        dist_to_target = (
+                                 abs(self.agent_loc[0] - self.target_loc[0])
+                                 + abs(self.agent_loc[1] - self.target_loc[1])
+                         ) / max_grid_distance
+
+        # Number of currently active items
+        num_items = len(self.item_locs) / (
+                self.vertical_cell_count * self.horizontal_cell_count
+        )
+
+        # Free capacity
+        free_capacity = (
+                                self.agent_capacity - self.agent_load
+                        ) / self.agent_capacity
+
+        # Binary carrying feature
+        is_carrying = 1 if self.agent_load > 0 else 0
+
+        if self.item_locs:
+            item_distances = [
+                abs(self.agent_loc[0] - item_loc[0])
+                + abs(self.agent_loc[1] - item_loc[1])
+                for item_loc in self.item_locs
+            ]
+
+            # Distance to nearest item
+            nearest_item_distance = min(item_distances) / max_grid_distance
+
+            # Average distance to all visible items
+            avg_item_distance = (
+                                        sum(item_distances) / len(item_distances)
+                                ) / max_grid_distance
+
+            # Urgency: older items are more urgent
+            oldest_item_time = max(self.item_times) / self.max_response_time
+
+            # Time remaining for most urgent item
+            min_time_remaining = (
+                                         self.max_response_time - max(self.item_times)
+                                 ) / self.max_response_time
+
+        else:
+            nearest_item_distance = 1.0
+            avg_item_distance = 1.0
+            oldest_item_time = 0.0
+            min_time_remaining = 1.0
+
+        engineered_features = [
+            dist_to_target,
+            num_items,
+            free_capacity,
+            is_carrying,
+            nearest_item_distance,
+            avg_item_distance,
+            oldest_item_time,
+            min_time_remaining
+        ]
+
+        obs = (
+                step_count_obs
+                + agent_loc_obs
+                + agent_load_obs
+                + item_loc_obs
+                + item_times_obs
+                + engineered_features
+        )
+
+        return obs
