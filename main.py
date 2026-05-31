@@ -28,7 +28,7 @@ env = Environment(variant, data_dir)
 env.feature_mode = "all" # ToDo: train, then change to "env.feature_mode = "no_distance" " and train again
                          # then  change to "env.feature_mode = "no_urgency"" and train and then to "env.feature_mode = "no_capacity""
                          # and train again
-                         # Compare results in a table and see which features actually help the agent
+                         # ToDo: compare results in a table and see which features actually help the agent
 
 
 # TODO: execute training
