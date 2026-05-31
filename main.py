@@ -8,7 +8,7 @@ import rainbow_dqn
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--variant', type=int, default=0, choices=[0, 1, 2])
+parser.add_argument('--variant', type=int, default=2, choices=[0, 1, 2])
 parser.add_argument('--seed', type=int, default=777) # seed can be any other number
 parser.add_argument('--data_dir', type=str, default='./data')
 
@@ -93,7 +93,7 @@ def train_dqn(env):
 
     ##--------Version Information--------##
     network = rainbow_dqn.DQN_v8(env)
-    model_version = 3
+    model_version = 4
     # note = "Architecture: 54 64 64 5"
     note = "NA"
     ##----------------------------------##
@@ -235,8 +235,8 @@ def train_ppo(env):
 
     ##--------Version Information--------##
     network = ppo.PPO_v1(env)
-    model_version = 3
-    note = "Test to avoid stop greedy action"
+    model_version = 4
+    note = "NA"
     ##----------------------------------##
 
     start_time = time.time()

@@ -855,8 +855,8 @@ class DQN_v8:
         self.delta_z = (self.v_max - self.v_min) / (self.num_atoms - 1)
 
         self.epsilon_start = 1.0
-        self.epsilon_end = 0.1
-        self.epsilon_decay_steps = self.num_episodes * 1.0
+        self.epsilon_end = 0.05
+        self.epsilon_decay_steps = self.num_episodes * 0.8
         self.epsilon = self.epsilon_start
 
         self.n_step = 1
