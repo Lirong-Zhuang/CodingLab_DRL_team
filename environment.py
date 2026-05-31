@@ -26,6 +26,7 @@ class Environment(object):
         self.max_response_time = 15 if self.variant == 2 else 10
         self.reward = 25 if self.variant == 2 else 15
         self.data_dir = data_dir
+        self.feature_mode = "all"
 
         self.training_episodes = pd.read_csv(self.data_dir + f'/variant_{self.variant}/training_episodes.csv')
         self.training_episodes = self.training_episodes.training_episodes.tolist()
@@ -240,5 +241,37 @@ class Environment(object):
                 + item_times_obs
                 + engineered_features
         )
+
+        if self.feature_mode == "none":
+            engineered_features = []
+
+        elif self.feature_mode == "no_distance":
+            engineered_features = [
+                num_items,
+                free_capacity,
+                is_carrying,
+                oldest_item_time,
+                min_time_remaining
+            ]
+
+        elif self.feature_mode == "no_urgency":
+            engineered_features = [
+                dist_to_target,
+                num_items,
+                free_capacity,
+                is_carrying,
+                nearest_item_distance,
+                avg_item_distance
+            ]
+
+        elif self.feature_mode == "no_capacity":
+            engineered_features = [
+                dist_to_target,
+                num_items,
+                nearest_item_distance,
+                avg_item_distance,
+                oldest_item_time,
+                min_time_remaining
+            ]
 
         return obs

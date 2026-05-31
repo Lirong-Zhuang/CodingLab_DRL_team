@@ -24,6 +24,7 @@ from environment import Environment
 data_dir = ...  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = ...  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
 env = Environment(variant, data_dir)
+env.feature_mode = "all"
 
 
 # TODO: execute training
