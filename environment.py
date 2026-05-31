@@ -96,6 +96,16 @@ class Environment(object):
         else:
             done = 0
 
+        old_dist_to_target = abs(self.agent_loc[0] - self.target_loc[0]) + abs(self.agent_loc[1] - self.target_loc[1])
+
+        if self.item_locs:
+            old_dist_to_nearest_item = min(
+                abs(self.agent_loc[0] - item[0]) + abs(self.agent_loc[1] - item[1])
+                for item in self.item_locs
+            )
+        else:
+            old_dist_to_nearest_item = None
+
         # agent movement
         if act != 0:
             if act == 1:  # up
@@ -123,6 +133,31 @@ class Environment(object):
         if self.agent_loc == self.target_loc:
             rew += self.agent_load * self.reward / 2
             self.agent_load = 0
+
+        new_dist_to_target = abs(self.agent_loc[0] - self.target_loc[0]) + abs(self.agent_loc[1] - self.target_loc[1])
+
+        if self.item_locs:
+            new_dist_to_nearest_item = min(
+                abs(self.agent_loc[0] - item[0]) + abs(self.agent_loc[1] - item[1])
+                for item in self.item_locs
+            )
+        else:
+            new_dist_to_nearest_item = None
+
+        # Reward shaping
+        if self.agent_load > 0:
+            # If carrying item, reward moving closer to target
+            if new_dist_to_target < old_dist_to_target:
+                rew += 0.2
+            elif new_dist_to_target > old_dist_to_target:
+                rew -= 0.2
+        else:
+            # If not carrying item, reward moving closer to nearest item
+            if old_dist_to_nearest_item is not None and new_dist_to_nearest_item is not None:
+                if new_dist_to_nearest_item < old_dist_to_nearest_item:
+                    rew += 0.2
+                elif new_dist_to_nearest_item > old_dist_to_nearest_item:
+                    rew -= 0.2
 
         # track how long ago items appeared
         self.item_times = [i + 1 for i in self.item_times]
