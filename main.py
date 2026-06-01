@@ -8,7 +8,7 @@ import rainbow_dqn
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--variant', type=int, default=2, choices=[0, 1, 2])
+parser.add_argument('--variant', type=int, default=0, choices=[0, 1, 2])
 parser.add_argument('--seed', type=int, default=777) # seed can be any other number
 parser.add_argument('--data_dir', type=str, default='./data')
 
@@ -93,7 +93,7 @@ def train_dqn(env):
 
     ##--------Version Information--------##
     network = rainbow_dqn.DQN_v8(env)
-    model_version = 4
+    model_version = 9
     # note = "Architecture: 54 64 64 5"
     note = "NA"
     ##----------------------------------##
@@ -116,7 +116,7 @@ def train_dqn(env):
 
     # file protection
     run_name = f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}'
-    log_dir = f'./log_variant1/{run_name}'
+    log_dir = f'./logs2/{run_name}'
     if os.path.exists(model_path) or os.path.exists(log_dir):
         raise FileExistsError(
             f'Model name already exists: {run_name}. '

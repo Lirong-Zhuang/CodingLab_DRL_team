@@ -846,7 +846,7 @@ class DQN_v8:
         self.num_episodes = 10000
         self.batch_size = 64
         self.gamma = 0.95
-        self.learning_rate = 5e-5
+        self.learning_rate = 1e-5
         self.target_update_freq = 10
         self.num_atoms = 51
         self.v_min = -50
