@@ -92,10 +92,10 @@ def validate_dqn(env, network, num_validation_episodes):
 def train_dqn(env):
 
     ##--------Version Information--------##
-    network = rainbow_dqn.DQN_v8(env)
-    model_version = 9
+    network = rainbow_dqn.DQN_v10(env)
+    model_version = 1
     # note = "Architecture: 54 64 64 5"
-    note = "NA"
+    note = "CNN and ResNet18"
     ##----------------------------------##
 
     start_time = time.time()
