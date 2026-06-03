@@ -1135,9 +1135,16 @@ class DQN_v10:
             return np.random.randint(self.act_dim)
 
         obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
-        with torch.no_grad():
-            action_probs = self.q_network(obs_tensor)
-            q_values = (action_probs * self.support.view(1, 1, -1)).sum(dim=2) 
+        was_training = self.q_network.training
+        self.q_network.eval()
+        try:
+            with torch.no_grad():
+                action_probs = self.q_network(obs_tensor)
+                q_values = (action_probs * self.support.view(1, 1, -1)).sum(dim=2)
+        finally:
+            if was_training:
+                self.q_network.train()
+
         act = torch.argmax(q_values, dim=1).item()
         self.q_network.reset_noise()
         return int(act)
