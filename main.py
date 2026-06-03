@@ -11,6 +11,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--variant', type=int, default=0, choices=[0, 1, 2])
 parser.add_argument('--seed', type=int, default=777) # seed can be any other number
 parser.add_argument('--data_dir', type=str, default='./data')
+parser.add_argument('--env_version', type=int, default=5, choices=[1, 2, 3, 4, 5, 6, 7, 8])
+parser.add_argument('--network_version', type=int, default=10, choices=[6, 7, 8, 9, 10])
+parser.add_argument('--model_version', type=int, default=1)
+parser.add_argument('--num_episodes', type=int, default=None)
 
 args = parser.parse_args()
 
@@ -44,13 +48,42 @@ from environment_v3 import Environment_v3
 from environment_v4 import Environment_v4
 from environment_v5 import Environment_v5
 from environment_v6 import Environment_v6
+from environment_v7 import Environment_v7
+from environment_v8 import Environment_v8
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
-# env = Environment(variant, data_dir)
-# env = Environment_v2(variant, data_dir)
-env = Environment_v5(variant, data_dir)
 model_dir = './models'
+os.makedirs(model_dir, exist_ok=True)
+os.makedirs('./logs2', exist_ok=True)
+
+
+def build_env(env_version, variant, data_dir):
+    env_classes = {
+        1: Environment,
+        2: Environment_v2,
+        3: Environment_v3,
+        4: Environment_v4,
+        5: Environment_v5,
+        6: Environment_v6,
+        7: Environment_v7,
+        8: Environment_v8,
+    }
+    return env_classes[env_version](variant, data_dir)
+
+
+def build_dqn_network(network_version, env):
+    network_classes = {
+        6: rainbow_dqn.DQN_v6,
+        7: rainbow_dqn.DQN_v7,
+        8: rainbow_dqn.DQN_v8,
+        9: rainbow_dqn.DQN_v9,
+        10: rainbow_dqn.DQN_v10,
+    }
+    return network_classes[network_version](env)
+
+
+env = build_env(args.env_version, variant, data_dir)
 
 
 # DQN validation function
@@ -92,10 +125,13 @@ def validate_dqn(env, network, num_validation_episodes):
 def train_dqn(env):
 
     ##--------Version Information--------##
-    network = rainbow_dqn.DQN_v10(env)
-    model_version = 1
-    # note = "Architecture: 54 64 64 5"
-    note = "CNN and ResNet18"
+    network = build_dqn_network(args.network_version, env)
+    if args.num_episodes is not None:
+        network.num_episodes = args.num_episodes
+        if hasattr(network, 'epsilon_decay_steps'):
+            network.epsilon_decay_steps = network.num_episodes * 0.8
+    model_version = args.model_version
+    note = f'network_version: {args.network_version}, env_version: {args.env_version}'
     ##----------------------------------##
 
     start_time = time.time()
@@ -375,5 +411,3 @@ def train_ppo(env):
 # TODO: execute training
 if __name__ == '__main__':
     train_dqn(env)
-
-
