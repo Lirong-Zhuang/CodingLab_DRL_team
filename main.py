@@ -11,8 +11,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--variant', type=int, default=0, choices=[0, 1, 2])
 parser.add_argument('--seed', type=int, default=777) # seed can be any other number
 parser.add_argument('--data_dir', type=str, default='./data')
-parser.add_argument('--env_version', type=int, default=7, choices=[1, 2, 3, 4, 5, 6, 7, 8])
-parser.add_argument('--network_version', type=int, default=8, choices=[6, 7, 8, 9, 10])
+parser.add_argument('--env_version', type=int, default=8, choices=[1, 2, 3, 4, 5, 6, 7, 8])
+parser.add_argument('--network_version', type=int, default=9, choices=[6, 7, 8, 9, 10])
 parser.add_argument('--model_version', type=int, default=1)
 parser.add_argument('--num_episodes', type=int, default=None)
 
