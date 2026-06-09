@@ -19,7 +19,7 @@ def test_policy(env):
 
     # network
     network = rainbow_dqn.DQN_v8(env)
-    network.q_network.load_state_dict(torch.load('./models/DQN_v8.5.4_variant_2.pt', map_location=network.device))
+    network.q_network.load_state_dict(torch.load('./models/DQN_v8.5.1_variant_0.pt', map_location=network.device))
     network.q_network.eval()
     network.epsilon = 0
 
@@ -34,13 +34,13 @@ def test_policy(env):
 
     avg_test_rew = test_rew / 100  # compute the average reward per episode
 
-    print(avg_test_rew)  # print the result
+    print(f'Average Test Reward of Model DQN_v8.5.1_variant_0: {avg_test_rew}')  # print the result
 
 
 if __name__ == '__main__':
 
     data_dir = './data' # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
-    variant = 2  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
+    variant = 0  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
     env = Environment_v5(variant=variant, data_dir=data_dir)  # initialize the environment
 
     test_policy(env)  # test the trained policy
