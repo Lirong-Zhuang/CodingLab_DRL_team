@@ -11,7 +11,6 @@ Python 3.11 is recommended. This project was tested with Python 3.11.6.
 ## Create virtual environment
 
 ```
-
 python -m venv .venv
 ```
 
@@ -20,49 +19,42 @@ python -m venv .venv
 Linux/macOS:
 
 ```
-
 source .venv/bin/activate
 ```
 
 Windows:
 
 ```
-
 .\.venv\Scripts\Activate.ps1
 ```
 
 ## Install dependencies
 
 ```
-
 pip install -r requirements.txt
 ```
 
-+
+and Pytorch, choose the version with or without CUDA according to your device
 
 ```
-
 python -m pip install torch torchvision torchaudio
 ```
 
 or
 
 ```
-
 python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 ```
 
 ## Run
 
 ```
-
 python main.py
 ```
 
 ## Tensor-Board
 
 ```
-
 tensorboard --logdir logs
 ```
 
@@ -72,7 +64,6 @@ tensorboard --logdir logs
 ## Upload Files
 
 ```
-
 cd ..../CodingLab_DRL_team
 sftp <Account>@<host>
 
@@ -84,21 +75,17 @@ put -r ...
 bye
 ```
 
-## Terminal to Cluster via SSH and Run
+## SSH Connection
 
 ```
-
 ssh <Account>@<host>
 
 cd code_for_zhuang
-
-bash cluster/master_GPU.sh 
 ```
 
 ## Create Enroot Environment
 
 ```
-
 cd ~/code_for_zhuang
 
 salloc -p lrz-dgx-a100-80x8 --gres=gpu:1
@@ -122,14 +109,18 @@ ls -lh tf_container_dgx-a100-80.sqsh
 ## Check Mission Process
 
 ```
-
 squeue -u $USER
+```
+
+## Submit Mission
+
+```
+bash cluster/master_GPU.sh 
 ```
 
 ## Download Files
 
 ```
-
 cd /home/zhuanglr/Documents/TUM/CodingLab/CodingLab_DRL_team
 
 sftp <Account>@<host>
