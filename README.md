@@ -10,43 +10,68 @@ Python 3.11 is recommended. This project was tested with Python 3.11.6.
 
 ## Create virtual environment
 
+```
+
 python -m venv .venv
+```
 
 ## Activate
 
 Linux/macOS:
 
+```
+
 source .venv/bin/activate
+```
 
 Windows:
 
+```
+
 .\.venv\Scripts\Activate.ps1
+```
 
 ## Install dependencies
 
+```
+
 pip install -r requirements.txt
+```
 
 +
 
+```
+
 python -m pip install torch torchvision torchaudio
+```
 
 or
 
-python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+```
 
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+```
 
 ## Run
 
+```
+
 python main.py
+```
 
 ## Tensor-Board
 
+```
+
 tensorboard --logdir logs
+```
 
 
 # Train in Cluster
 
 ## Upload Files
+
+```
 
 cd ..../CodingLab_DRL_team
 sftp <Account>@<host>
@@ -57,16 +82,22 @@ put ....
 put -r ...
 
 bye
+```
 
 ## Terminal to Cluster via SSH and Run
+
+```
 
 ssh <Account>@<host>
 
 cd code_for_zhuang
 
 bash cluster/master_GPU.sh 
+```
 
 ## Create Enroot Environment
+
+```
 
 cd ~/code_for_zhuang
 
@@ -86,14 +117,18 @@ exit
 
 enroot export -o tf_container_dgx-a100-80.sqsh codinglab_drl_zhuang
 ls -lh tf_container_dgx-a100-80.sqsh
+```
 
 ## Check Mission Process
 
-squeue -u $USER
+```
 
-tail -f slurm-*<Mission Number>.out
+squeue -u $USER
+```
 
 ## Download Files
+
+```
 
 cd /home/zhuanglr/Documents/TUM/CodingLab/CodingLab_DRL_team
 
@@ -108,3 +143,4 @@ get models/<Model Name>.pt
 get -r logs2/DQN_v8.5.13_variant_0
 
 bye
+```
