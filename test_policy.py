@@ -16,13 +16,13 @@ import dqn
 import rainbow_dqn
 
 
-MODEL_NAME = 'DQN_v8.5.1_variant_0'
+MODEL_NAME = 'DQN_v8.5.4_variant_2'
 MODEL_PATH = f'./models/{MODEL_NAME}.pt'
-VARIANT = 0
+VARIANT = 2
 DATA_DIR = './data'
 NUM_TEST_EPISODES = 100
 RESULT_DIR = './test_result'
-RESULT_FILE_NAME = 'Test_Results_Variant_0.csv'
+RESULT_FILE_NAME = 'Test_Results_Variant_2.csv'
 
 
 def test_policy(env):
