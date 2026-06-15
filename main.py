@@ -11,7 +11,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--variant', type=int, default=0, choices=[0, 1, 2])
 parser.add_argument('--seed', type=int, default=777) # seed can be any other number
 parser.add_argument('--data_dir', type=str, default='./data')
-parser.add_argument('--env_version', type=int, default=1, choices=[1, 2, 3, 4, 5, 6, 7, 8])
+parser.add_argument('--env_version', type=int, default=1, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 parser.add_argument('--network_version', type=int, default=5, choices=[5, 6, 7, 8, 9, 10])
 parser.add_argument('--model_version', type=int, default=2)
 parser.add_argument('--num_episodes', type=int, default=None)
@@ -50,6 +50,8 @@ from environment_v5 import Environment_v5
 from environment_v6 import Environment_v6
 from environment_v7 import Environment_v7
 from environment_v8 import Environment_v8
+from environment_v9 import Environment_v9
+from environment_v10 import Environment_v10
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
@@ -68,6 +70,8 @@ def build_env(env_version, variant, data_dir):
         6: Environment_v6,
         7: Environment_v7,
         8: Environment_v8,
+        9: Environment_v9,
+        10: Environment_v10,
     }
     return env_classes[env_version](variant, data_dir)
 

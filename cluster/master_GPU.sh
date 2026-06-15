@@ -1,6 +1,11 @@
 #!/bin/bash
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_DIR="$HOME/code_for_zhuang"
+
+mkdir -p "$PROJECT_DIR/models"
+mkdir -p "$PROJECT_DIR/logs_cluster"
+
+cd "$PROJECT_DIR"
 
 NETWORK_VERSION=8
 ENV_VERSION=5

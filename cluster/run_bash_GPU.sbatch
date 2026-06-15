@@ -16,7 +16,8 @@ CONTAINER_IMAGE="${CONTAINER_IMAGE:-$PROJECT_DIR/tf_container_dgx-a100-80.sqsh}"
 srun --mpi=pmi2 \
      --container-mounts="${PROJECT_DIR}:/mnt/code" \
      --container-image="${CONTAINER_IMAGE}" \
-     python /mnt/code/main.py \
+     --container-workdir=/mnt/code \
+     python main.py \
        --network_version="${NETWORK_VERSION}" \
        --env_version="${ENV_VERSION}" \
        --model_version="${MODEL_VERSION}" \
