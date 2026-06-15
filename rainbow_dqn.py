@@ -145,20 +145,20 @@ class RainbowCNNQNetwork(nn.Module):
         )
 
         self.feature = nn.Sequential(
-            nn.Linear(32 * 3 * 3, 64),
+            nn.Linear(32 * 3 * 3, 32),
             nn.ReLU()
         )
 
         self.value_stream = nn.Sequential(
-            nn.Linear(64, 64),
+            nn.Linear(32, 32),
             nn.ReLU(),
-            nn.Linear(64, num_atoms)
+            nn.Linear(32, num_atoms)
         )
 
         self.advantage_stream = nn.Sequential(
-            nn.Linear(64, 64),
+            nn.Linear(32, 32),
             nn.ReLU(),
-            nn.Linear(64, act_dim * num_atoms)
+            nn.Linear(32, act_dim * num_atoms)
         )
 
     def forward(self, x):
