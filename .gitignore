@@ -16,6 +16,7 @@ env/
 
 # Runtime / output files
 *.json
+videos/
 
 # Model outputs
 models/
