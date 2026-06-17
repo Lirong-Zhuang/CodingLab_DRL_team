@@ -2,21 +2,34 @@ import time
 from torch.utils.tensorboard import SummaryWriter
 import dqn
 import ppo
-# TODO: parse arguments
-import argparse
 import rainbow_dqn
 
-parser = argparse.ArgumentParser()
 
-parser.add_argument('--variant', type=int, default=0, choices=[0, 1, 2])
-parser.add_argument('--seed', type=int, default=777) # seed can be any other number
-parser.add_argument('--data_dir', type=str, default='./data')
-parser.add_argument('--env_version', type=int, default=10, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-parser.add_argument('--network_version', type=int, default=8, choices=[5, 6, 7, 8, 9, 10])
-parser.add_argument('--model_version', type=int, default=1)
-parser.add_argument('--num_episodes', type=int, default=None)
+# Edit these values before running this file directly.
+VARIANT = 0
+SEED = 777
+DATA_DIR = './data'
+NETWORK_VERSION = 11
+ENV_VERSION = 5
+MODEL_VERSION = 1
+NUM_EPISODES = 10000
+ENCODER_PATH = './autoencoder/autoencoder_models/encoder_env5_variant0_v6.pt'
+FREEZE_ENCODER = True
 
-args = parser.parse_args()
+
+class Config:
+    variant = VARIANT
+    seed = SEED
+    data_dir = DATA_DIR
+    env_version = ENV_VERSION
+    network_version = NETWORK_VERSION
+    model_version = MODEL_VERSION
+    num_episodes = NUM_EPISODES
+    encoder_path = ENCODER_PATH
+    freeze_encoder = FREEZE_ENCODER
+
+
+args = Config()
 
 
 # set seed
@@ -84,7 +97,14 @@ def build_dqn_network(network_version, env):
         8: rainbow_dqn.DQN_v8,
         9: rainbow_dqn.DQN_v9,
         10: rainbow_dqn.DQN_v10,
+        11: rainbow_dqn.DQN_v11,
     }
+    if network_version == 11:
+        return rainbow_dqn.DQN_v11(
+            env,
+            encoder_path=args.encoder_path,
+            freeze_encoder=args.freeze_encoder,
+        )
     return network_classes[network_version](env)
 
 
@@ -136,7 +156,10 @@ def train_dqn(env):
         if hasattr(network, 'epsilon_decay_steps'):
             network.epsilon_decay_steps = network.num_episodes * 0.8
     model_version = args.model_version
-    note = f'network_version: {args.network_version}, env_version: {args.env_version}'
+    note = (
+        f'network_version: {args.network_version}, env_version: {args.env_version}, '
+        f'encoder_path: {args.encoder_path}, freeze_encoder: {args.freeze_encoder}'
+    )
     ##----------------------------------##
 
     start_time = time.time()

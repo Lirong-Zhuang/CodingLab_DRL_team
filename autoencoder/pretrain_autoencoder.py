@@ -1,13 +1,14 @@
 import argparse
-import csv
 from datetime import datetime
 import os
 import sys
+import time
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, TensorDataset
 
 from autoencoder_model import GridAutoencoderEnv5
@@ -31,24 +32,17 @@ def weighted_reconstruction_loss(reconstructed, target, channel_weights):
     return (squared_error * weights).mean()
 
 
-def list_episode_ids(data_dir, variant):
-    episode_dir = os.path.join(data_dir, f"variant_{variant}", "episode_data")
-    episode_ids = []
-    for filename in os.listdir(episode_dir):
-        if filename.startswith("episode_") and filename.endswith(".csv"):
-            episode_ids.append(int(filename[len("episode_") : -len(".csv")]))
-    return sorted(episode_ids)
-
-
-def split_episode_ids(episode_ids):
-    test_episodes = [episode_id for episode_id in episode_ids if 0 <= episode_id <= 9]
-    val_episodes = [episode_id for episode_id in episode_ids if 100 <= episode_id <= 199]
-    held_out_episodes = set(test_episodes + val_episodes)
-    train_episodes = [
-        episode_id
-        for episode_id in episode_ids
-        if episode_id not in held_out_episodes
-    ]
+def read_episode_split(data_dir, variant):
+    split_dir = os.path.join(data_dir, f"variant_{variant}")
+    train_episodes = pd.read_csv(
+        os.path.join(split_dir, "training_episodes.csv")
+    ).training_episodes.tolist()
+    val_episodes = pd.read_csv(
+        os.path.join(split_dir, "validation_episodes.csv")
+    ).validation_episodes.tolist()
+    test_episodes = pd.read_csv(
+        os.path.join(split_dir, "test_episodes.csv")
+    ).test_episodes.tolist()
     return train_episodes, val_episodes, test_episodes
 
 
@@ -183,13 +177,53 @@ def evaluate_on_episodes(model, env, episode_ids, args, channel_weights, device)
     return loss_sum / count
 
 
+def format_hyperparameters(args, device, train_episodes, val_episodes, test_episodes):
+    values = {
+        "variant": args.variant,
+        "model_version": args.model_version,
+        "data_dir": args.data_dir,
+        "model_dir": args.model_dir,
+        "epochs": args.epochs,
+        "batch_size": args.batch_size,
+        "learning_rate": args.learning_rate,
+        "weight_decay": args.weight_decay,
+        "feature_dim": args.feature_dim,
+        "validation_interval": args.validation_interval,
+        "max_train_episodes": args.max_train_episodes,
+        "policy": args.policy,
+        "greedy_prob": args.greedy_prob,
+        "no_shuffle_episodes": args.no_shuffle_episodes,
+        "channel_weights": args.channel_weights,
+        "seed": args.seed,
+        "device": str(device),
+        "train_episodes": len(train_episodes),
+        "validation_episodes": len(val_episodes),
+        "test_episodes": len(test_episodes),
+    }
+    return "\n".join(f"{key}: {value}" for key, value in values.items())
+
+
+def format_duration(seconds):
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    remaining_seconds = seconds % 60
+    return f"{hours:.0f}h {minutes:.0f}min {remaining_seconds:.2f}s"
+
+
 def train_autoencoder(args):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
-    episode_ids = list_episode_ids(args.data_dir, args.variant)
-    train_episodes, val_episodes, test_episodes = split_episode_ids(episode_ids)
+    os.makedirs(args.log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_name = f"autoencoder_env5_variant{args.variant}_v{args.model_version}_{timestamp}"
+    tensorboard_log_dir = os.path.join(args.log_dir, run_name)
+
+    train_episodes, val_episodes, test_episodes = read_episode_split(
+        args.data_dir,
+        args.variant,
+    )
 
     if args.max_train_episodes is not None:
         train_episodes = train_episodes[: args.max_train_episodes]
@@ -199,18 +233,25 @@ def train_autoencoder(args):
         f"validation={len(val_episodes)} test={len(test_episodes)}"
     )
 
-    model = GridAutoencoderEnv5(in_channels=5, feature_channels=args.feature_channels).to(device)
+    model = GridAutoencoderEnv5(in_channels=5, feature_dim=args.feature_dim).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     channel_weights = torch.tensor(args.channel_weights, dtype=torch.float32)
     train_env = Environment_v5(variant=args.variant, data_dir=args.data_dir)
     val_env = Environment_v5(variant=args.variant, data_dir=args.data_dir)
+    writer = SummaryWriter(log_dir=tensorboard_log_dir)
+    writer.add_text(
+        "Hyperparameters",
+        format_hyperparameters(args, device, train_episodes, val_episodes, test_episodes),
+        0,
+    )
 
     best_val_loss = float("inf")
     best_state = None
-    history = []
     recent_train_losses = []
 
     rng = np.random.default_rng(args.seed)
+    start_time = time.time()
+    total_train_episodes = args.epochs * len(train_episodes)
 
     for epoch in range(args.epochs):
         if not args.no_shuffle_episodes:
@@ -234,6 +275,8 @@ def train_autoencoder(args):
                 device,
             )
             recent_train_losses.append(train_loss)
+            episodes_seen = (epoch * len(epoch_train_episodes)) + episode_position
+            writer.add_scalar("Loss/train", train_loss, episodes_seen)
 
             should_validate = (
                 episode_position % args.validation_interval == 0
@@ -252,13 +295,14 @@ def train_autoencoder(args):
             )
             train_loss_window = float(np.mean(recent_train_losses))
             recent_train_losses = []
+            writer.add_scalar("Loss/validation", val_loss, episodes_seen)
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 best_state = {
                     "model_state_dict": model.state_dict(),
                     "encoder_state_dict": model.encoder.state_dict(),
-                    "feature_channels": args.feature_channels,
+                    "feature_dim": args.feature_dim,
                     "channel_weights": args.channel_weights,
                     "epoch": epoch + 1,
                     "episodes_seen": (epoch * len(epoch_train_episodes)) + episode_position,
@@ -269,26 +313,21 @@ def train_autoencoder(args):
                     "policy": args.policy,
                     "greedy_prob": args.greedy_prob,
                 }
-
-            history.append(
-                {
-                    "epoch": epoch + 1,
-                    "episode_id": episode_id,
-                    "episodes_seen": (epoch * len(epoch_train_episodes)) + episode_position,
-                    "train_loss": train_loss_window,
-                    "val_loss": val_loss,
-                    "best_val_loss": best_val_loss,
-                }
-            )
+            elapsed_time = time.time() - start_time
+            avg_time_per_episode = elapsed_time / episodes_seen
+            remaining_episodes = total_train_episodes - episodes_seen
+            estimated_remaining_time = avg_time_per_episode * remaining_episodes
 
             print(
                 f"Epoch {epoch + 1:03d}/{args.epochs} "
                 f"episode {episode_position:03d}/{len(epoch_train_episodes)} "
                 f"last_episode={episode_id:03d} "
                 f"train_loss={train_loss_window:.6f} "
-                f"val_loss={val_loss:.6f}"
+                f"val_loss={val_loss:.6f} "
+                f"Remaining Time: {format_duration(estimated_remaining_time)}"
             )
 
+    training_time = time.time() - start_time
     os.makedirs(args.model_dir, exist_ok=True)
     autoencoder_path = os.path.join(
         args.model_dir,
@@ -307,45 +346,32 @@ def train_autoencoder(args):
     torch.save(best_state, autoencoder_path)
     torch.save(best_state["encoder_state_dict"], encoder_path)
 
-    os.makedirs(args.log_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = os.path.join(
-        args.log_dir,
-        f"autoencoder_env5_variant{args.variant}_v{args.model_version}_{timestamp}_training_log.csv",
-    )
-    with open(log_path, "w", newline="") as log_file:
-        writer = csv.DictWriter(
-            log_file,
-            fieldnames=[
-                "epoch",
-                "episode_id",
-                "episodes_seen",
-                "train_loss",
-                "val_loss",
-                "best_val_loss",
-            ],
-        )
-        writer.writeheader()
-        writer.writerows(history)
+    writer.add_text("Result/AutoencoderPath", autoencoder_path, 0)
+    writer.add_text("Result/EncoderPath", encoder_path, 0)
+    writer.add_text("Result/TrainingTime", format_duration(training_time), 0)
+    writer.flush()
+    writer.close()
 
     print(f"Saved autoencoder checkpoint to {autoencoder_path}")
     print(f"Saved encoder weights to {encoder_path}")
-    print(f"Saved training log to {log_path}")
+    print(f"Saved TensorBoard logs to {tensorboard_log_dir}")
     print(f"Best validation loss: {best_val_loss:.6f}")
+    print(f"Training Time: {format_duration(training_time)}")
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--variant", type=int, default=0, choices=[0, 1, 2])
-    parser.add_argument("--model_version", type=int, default=1)
+    parser.add_argument("--model_version", type=int, default=6)
     parser.add_argument("--data_dir", type=str, default="./data")
     parser.add_argument("--model_dir", type=str, default=DEFAULT_MODEL_DIR)
     parser.add_argument("--log_dir", type=str, default=DEFAULT_LOG_DIR)
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--learning_rate", type=float, default=1e-3)
     parser.add_argument("--weight_decay", type=float, default=1e-5)
-    parser.add_argument("--feature_channels", type=int, default=64)
+    parser.add_argument("--feature_dim", type=int, default=64)
+    parser.add_argument("--feature_channels", type=int, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--validation_interval", type=int, default=100)
     parser.add_argument("--max_train_episodes", type=int, default=None)
     parser.add_argument("--policy", type=str, default="greedy", choices=["random", "greedy", "mixed"])
@@ -360,7 +386,10 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=777)
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.feature_channels is not None:
+        args.feature_dim = args.feature_channels
+    return args
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Rectangle
 import torch
+import torch.nn as nn
 
 import dqn
 import rainbow_dqn
@@ -32,8 +33,8 @@ ACTION_NAMES = {
 
 
 # Edit these values, then run this file directly.
-POLICY = "greedy"  # "greedy" or "model"
-MODEL_PATH = None  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
+POLICY = "model"  # "greedy" or "model"
+MODEL_PATH = "./models/DQN_v8.5.1_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
 VARIANT = 0
 ENV_VERSION = 5
 NETWORK_VERSION = 8
@@ -41,7 +42,7 @@ DATA_DIR = "./data"
 EPISODE_ID = "000"
 MAX_STEPS = None
 INTERVAL = 350
-SAVE_PATH = "./videos/greedy_test_000.mp4"
+SAVE_PATH = "./videos/DQN_v8.5.1_test_000.mp4"
 VIDEO_FPS = 4
 VIDEO_DPI = 120
 FFMPEG_PATH = None  # e.g. "/opt/homebrew/bin/ffmpeg"; leave None to use system PATH
@@ -71,7 +72,81 @@ NETWORK_CLASSES = {
     8: rainbow_dqn.DQN_v8,
     9: rainbow_dqn.DQN_v9,
     10: rainbow_dqn.DQN_v10,
+    11: rainbow_dqn.DQN_v11,
 }
+
+
+class LegacyRainbowCNNQNetwork64(nn.Module):
+    def __init__(self, in_channels, act_dim, num_atoms):
+        super().__init__()
+        self.act_dim = act_dim
+        self.num_atoms = num_atoms
+
+        self.cnn = nn.Sequential(
+            nn.Conv2d(in_channels, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=3, padding=0),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+
+        self.feature = nn.Sequential(
+            nn.Linear(32 * 3 * 3, 64),
+            nn.ReLU(),
+        )
+
+        self.value_stream = nn.Sequential(
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, num_atoms),
+        )
+
+        self.advantage_stream = nn.Sequential(
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, act_dim * num_atoms),
+        )
+
+    def forward(self, x):
+        features = self.cnn(x)
+        features = self.feature(features)
+
+        value = self.value_stream(features).view(-1, 1, self.num_atoms)
+        advantage = self.advantage_stream(features).view(-1, self.act_dim, self.num_atoms)
+
+        logits = value + advantage - advantage.mean(dim=1, keepdim=True)
+        return torch.softmax(logits, dim=-1)
+
+    def reset_noise(self):
+        pass
+
+
+def adapt_legacy_network_if_needed(network, network_version, state_dict, device):
+    if network_version != 8:
+        return
+    feature_weight = state_dict.get("feature.0.weight")
+    current_feature_weight = network.q_network.state_dict().get("feature.0.weight")
+    if feature_weight is None or current_feature_weight is None:
+        return
+    if feature_weight.shape == current_feature_weight.shape:
+        return
+    if feature_weight.shape == torch.Size([64, 288]):
+        network.q_network = LegacyRainbowCNNQNetwork64(
+            network.in_channels,
+            network.act_dim,
+            network.num_atoms,
+        ).to(device)
+        network.target_network = LegacyRainbowCNNQNetwork64(
+            network.in_channels,
+            network.act_dim,
+            network.num_atoms,
+        ).to(device)
+        return
+    raise RuntimeError(
+        "Unsupported DQN_v8 checkpoint shape: "
+        f"feature.0.weight is {tuple(feature_weight.shape)}, "
+        f"current model expects {tuple(current_feature_weight.shape)}"
+    )
 
 
 class GreedyPolicy:
@@ -175,8 +250,14 @@ def build_env(env_version=5, variant=0, data_dir="./data"):
 
 def load_network(env, network_version, model_path, cpu=False):
     network = NETWORK_CLASSES[network_version](env)
-    map_location = torch.device("cpu") if cpu else network.device
+    if cpu:
+        network.device = torch.device("cpu")
+        network.support = network.support.to(network.device)
+        network.q_network.to(network.device)
+        network.target_network.to(network.device)
+    map_location = network.device
     state_dict = torch.load(model_path, map_location=map_location)
+    adapt_legacy_network_if_needed(network, network_version, state_dict, network.device)
     network.q_network.load_state_dict(state_dict)
     network.q_network.eval()
     network.epsilon = 0
