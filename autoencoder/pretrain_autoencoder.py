@@ -266,6 +266,8 @@ def train_autoencoder(args):
                     "train_episode_split": train_episodes,
                     "validation_episode_split": val_episodes,
                     "test_episode_split": test_episodes,
+                    "policy": args.policy,
+                    "greedy_prob": args.greedy_prob,
                 }
 
             history.append(
@@ -339,15 +341,15 @@ def parse_args():
     parser.add_argument("--data_dir", type=str, default="./data")
     parser.add_argument("--model_dir", type=str, default=DEFAULT_MODEL_DIR)
     parser.add_argument("--log_dir", type=str, default=DEFAULT_LOG_DIR)
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--learning_rate", type=float, default=1e-3)
     parser.add_argument("--weight_decay", type=float, default=1e-5)
     parser.add_argument("--feature_channels", type=int, default=64)
     parser.add_argument("--validation_interval", type=int, default=100)
     parser.add_argument("--max_train_episodes", type=int, default=None)
-    parser.add_argument("--policy", type=str, default="mixed", choices=["random", "greedy", "mixed"])
-    parser.add_argument("--greedy_prob", type=float, default=0.3)
+    parser.add_argument("--policy", type=str, default="greedy", choices=["random", "greedy", "mixed"])
+    parser.add_argument("--greedy_prob", type=float, default=1.0)
     parser.add_argument("--no_shuffle_episodes", action="store_true")
     parser.add_argument(
         "--channel_weights",
