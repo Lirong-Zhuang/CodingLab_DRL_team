@@ -11,10 +11,11 @@ SEED = 777
 DATA_DIR = './data'
 NETWORK_VERSION = 11
 ENV_VERSION = 5
-MODEL_VERSION = 1
+MODEL_VERSION = 3
 NUM_EPISODES = 10000
 ENCODER_PATH = './autoencoder/autoencoder_models/encoder_env5_variant0_v6.pt'
-FREEZE_ENCODER = True
+# ENCODER_PATH = None
+FREEZE_ENCODER = False
 
 
 class Config:
