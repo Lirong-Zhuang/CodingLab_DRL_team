@@ -21,6 +21,7 @@ from environment_v7 import Environment_v7
 from environment_v8 import Environment_v8
 from environment_v9 import Environment_v9
 from environment_v10 import Environment_v10
+from environment_v11 import Environment_v11
 
 
 ACTION_NAMES = {
@@ -34,15 +35,15 @@ ACTION_NAMES = {
 
 # Edit these values, then run this file directly.
 POLICY = "model"  # "greedy" or "model"
-MODEL_PATH = "./models/DQN_v8.5.1_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
+MODEL_PATH = "./models/DQN_v8.9.2_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
 VARIANT = 0
-ENV_VERSION = 5
+ENV_VERSION = 9
 NETWORK_VERSION = 8
 DATA_DIR = "./data"
 EPISODE_ID = "000"
 MAX_STEPS = None
 INTERVAL = 350
-SAVE_PATH = "./videos/DQN_v8.5.1_test_000.mp4"
+SAVE_PATH = "./videos/DQN_v8.9.2_test_000.mp4"
 VIDEO_FPS = 4
 VIDEO_DPI = 120
 FFMPEG_PATH = None  # e.g. "/opt/homebrew/bin/ffmpeg"; leave None to use system PATH
@@ -62,6 +63,7 @@ ENV_CLASSES = {
     8: Environment_v8,
     9: Environment_v9,
     10: Environment_v10,
+    11: Environment_v11,
 }
 
 

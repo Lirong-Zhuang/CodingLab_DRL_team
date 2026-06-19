@@ -11,6 +11,7 @@ from environment_v7 import Environment_v7
 from environment_v8 import Environment_v8
 from environment_v9 import Environment_v9
 from environment_v10 import Environment_v10
+from environment_v11 import Environment_v11
 import csv
 import os
 import torch

@@ -1,3 +1,4 @@
+import argparse
 import time
 from torch.utils.tensorboard import SummaryWriter
 import dqn
@@ -9,12 +10,11 @@ import rainbow_dqn
 VARIANT = 0
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = 11
-ENV_VERSION = 5
-MODEL_VERSION = 3
+NETWORK_VERSION = 8
+ENV_VERSION = 11
+MODEL_VERSION = 1
 NUM_EPISODES = 10000
-ENCODER_PATH = './autoencoder/autoencoder_models/encoder_env5_variant0_v6.pt'
-# ENCODER_PATH = None
+ENCODER_PATH = None
 FREEZE_ENCODER = False
 
 
@@ -30,7 +30,21 @@ class Config:
     freeze_encoder = FREEZE_ENCODER
 
 
-args = Config()
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--variant", type=int, default=VARIANT, choices=[0, 1, 2])
+    parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument("--data_dir", type=str, default=DATA_DIR)
+    parser.add_argument("--network_version", type=int, default=NETWORK_VERSION)
+    parser.add_argument("--env_version", type=int, default=ENV_VERSION)
+    parser.add_argument("--model_version", type=int, default=MODEL_VERSION)
+    parser.add_argument("--num_episodes", type=int, default=NUM_EPISODES)
+    parser.add_argument("--encoder_path", type=str, default=ENCODER_PATH)
+    parser.add_argument("--freeze_encoder", action="store_true", default=FREEZE_ENCODER)
+    return parser.parse_args()
+
+
+args = parse_args()
 
 
 # set seed
@@ -66,6 +80,7 @@ from environment_v7 import Environment_v7
 from environment_v8 import Environment_v8
 from environment_v9 import Environment_v9
 from environment_v10 import Environment_v10
+from environment_v11 import Environment_v11
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
@@ -86,6 +101,7 @@ def build_env(env_version, variant, data_dir):
         8: Environment_v8,
         9: Environment_v9,
         10: Environment_v10,
+        11: Environment_v11,
     }
     return env_classes[env_version](variant, data_dir)
 
