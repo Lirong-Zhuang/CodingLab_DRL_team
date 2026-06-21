@@ -4,15 +4,11 @@ from environment_v9 import Environment_v9
 
 
 class Environment_v11(Environment_v9):
-    """Environment v9 with an additional heuristic-value channel."""
+    """Environment v9 with an additional heuristic-value observation channel."""
 
     def __init__(self, variant, data_dir):
         super().__init__(variant, data_dir)
         self.env_name = "11."
-
-        # A successfully handled item is worth 30 in total:
-        # +15 when picked up and +15 when dropped off at the target.
-        self.reward = 30
 
     # CNN observation shape: 7 x 5 x 5
     def get_obs(self):
@@ -35,7 +31,7 @@ class Environment_v11(Environment_v9):
         # Channel 4: item remaining time
         # Channel 5: item reachability before its response time expires
         # Channel 6: normalized heuristic value:
-        #            (30 - agent-item distance - item-target distance) / 30
+        #            (reward - agent-item distance - item-target distance) / reward
         for item_loc, item_time in zip(self.item_locs, self.item_times):
             r, c = item_loc
             time_left = (
