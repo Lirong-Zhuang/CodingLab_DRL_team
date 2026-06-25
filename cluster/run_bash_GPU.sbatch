@@ -24,7 +24,9 @@ srun --mpi=pmi2 \
        --num_episodes="${NUM_EPISODES}" \
        --variant="${VARIANT}" \
        --seed="${SEED}" \
-       --data_dir=/mnt/code/data
+       --data_dir=/mnt/code/data \
+       --encoder_path="${ENCODER_PATH}" \
+       ${FREEZE_ENCODER:+--freeze_encoder}
 
 				
 						

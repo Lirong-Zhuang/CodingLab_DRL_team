@@ -10,11 +10,11 @@ import rainbow_dqn
 VARIANT = 0
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = 8
+NETWORK_VERSION = 11
 ENV_VERSION = 9
-MODEL_VERSION = 1
+MODEL_VERSION = 3
 NUM_EPISODES = 10000
-ENCODER_PATH = None
+ENCODER_PATH = './autoencoder/autoencoder_models/encoder_env9_variant0_v1.pt'
 FREEZE_ENCODER = False
 
 

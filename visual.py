@@ -1,5 +1,6 @@
 import argparse
 from copy import deepcopy
+import heapq
 import os
 
 import matplotlib as mpl
@@ -34,7 +35,7 @@ ACTION_NAMES = {
 
 
 # Edit these values, then run this file directly.
-POLICY = "model"  # "greedy" or "model"
+POLICY = "greedy_astar"  # "greedy", "greedy_astar", or "model"
 MODEL_PATH = "./models/DQN_v8.9.2_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
 VARIANT = 0
 ENV_VERSION = 9
@@ -43,7 +44,7 @@ DATA_DIR = "./data"
 EPISODE_ID = "000"
 MAX_STEPS = None
 INTERVAL = 350
-SAVE_PATH = "./videos/DQN_v8.9.2_test_000.mp4"
+SAVE_PATH = "./videos/greedy_astar_env9_variant0_test_000.mp4"
 VIDEO_FPS = 4
 VIDEO_DPI = 120
 FFMPEG_PATH = None  # e.g. "/opt/homebrew/bin/ffmpeg"; leave None to use system PATH
@@ -244,6 +245,110 @@ class GreedyPolicy:
             (row, col - 1),
         ]
         return [candidate for candidate in candidates if candidate in self.env.eligible_cells]
+
+
+class GreedyAStarPolicy:
+    def __init__(self, env):
+        self.env = env
+
+    def select_action(self, obs):
+        if self.env.agent_load == self.env.agent_capacity:
+            return self.action_towards(self.env.target_loc)
+
+        best_item = None
+        best_profit = 0
+        for item_loc, item_time in zip(self.env.item_locs, self.env.item_times):
+            distance_to_item = self.shortest_distance(self.env.agent_loc, item_loc)
+            time_left = self.env.max_response_time - item_time
+            if distance_to_item is None or distance_to_item > time_left:
+                continue
+
+            distance_to_target = self.shortest_distance(item_loc, self.env.target_loc)
+            if distance_to_target is None:
+                continue
+
+            profit = self.env.reward - distance_to_item - distance_to_target
+            if profit > best_profit:
+                best_profit = profit
+                best_item = item_loc
+
+        if best_item is None:
+            return 0
+        return self.action_towards(best_item)
+
+    def action_towards(self, target_loc):
+        if self.env.agent_loc == target_loc:
+            return 0
+
+        path = self.shortest_path(self.env.agent_loc, target_loc)
+        if path is None or len(path) < 2:
+            return 0
+
+        next_loc = path[1]
+        row_delta = next_loc[0] - self.env.agent_loc[0]
+        col_delta = next_loc[1] - self.env.agent_loc[1]
+
+        if row_delta == -1:
+            return 1
+        if col_delta == 1:
+            return 2
+        if row_delta == 1:
+            return 3
+        if col_delta == -1:
+            return 4
+        return 0
+
+    def shortest_distance(self, start, target):
+        path = self.shortest_path(start, target)
+        if path is None:
+            return None
+        return len(path) - 1
+
+    def shortest_path(self, start, target):
+        if start == target:
+            return [start]
+
+        frontier = [(0, 0, start)]
+        predecessors = {start: None}
+        costs = {start: 0}
+
+        while frontier:
+            _, cost, current = heapq.heappop(frontier)
+            if current == target:
+                break
+            if cost > costs[current]:
+                continue
+
+            for neighbor in self.neighbors(current):
+                new_cost = costs[current] + 1
+                if neighbor not in costs or new_cost < costs[neighbor]:
+                    costs[neighbor] = new_cost
+                    priority = new_cost + self.manhattan_distance(neighbor, target)
+                    heapq.heappush(frontier, (priority, new_cost, neighbor))
+                    predecessors[neighbor] = current
+
+        if target not in predecessors:
+            return None
+
+        path = [target]
+        while path[-1] != start:
+            path.append(predecessors[path[-1]])
+        path.reverse()
+        return path
+
+    def neighbors(self, loc):
+        row, col = loc
+        candidates = [
+            (row - 1, col),
+            (row, col + 1),
+            (row + 1, col),
+            (row, col - 1),
+        ]
+        return [candidate for candidate in candidates if candidate in self.env.eligible_cells]
+
+    @staticmethod
+    def manhattan_distance(start, target):
+        return abs(start[0] - target[0]) + abs(start[1] - target[1])
 
 
 def build_env(env_version=5, variant=0, data_dir="./data"):
@@ -517,7 +622,7 @@ def draw_side_panel(ax, frame):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Visualize a policy on one 5x5 test episode.")
-    parser.add_argument("--policy", type=str, default=POLICY, choices=["model", "greedy"])
+    parser.add_argument("--policy", type=str, default=POLICY, choices=["model", "greedy", "greedy_astar"])
     parser.add_argument("--model_path", type=str, default=MODEL_PATH)
     parser.add_argument("--variant", type=int, default=VARIANT, choices=[0, 1, 2])
     parser.add_argument("--env_version", type=int, default=ENV_VERSION, choices=sorted(ENV_CLASSES))
@@ -539,6 +644,8 @@ def main():
 
     if args.policy == "greedy":
         policy = GreedyPolicy(env)
+    elif args.policy == "greedy_astar":
+        policy = GreedyAStarPolicy(env)
     else:
         if args.model_path is None:
             raise ValueError("--model_path is required when --policy model")

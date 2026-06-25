@@ -390,7 +390,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--env_version", type=int, default=9, choices=[5, 9])
     parser.add_argument("--variant", type=int, default=0, choices=[0, 1, 2])
-    parser.add_argument("--model_version", type=int, default=7)
+    parser.add_argument("--model_version", type=int, default=1)
     parser.add_argument("--data_dir", type=str, default="./data")
     parser.add_argument("--model_dir", type=str, default=DEFAULT_MODEL_DIR)
     parser.add_argument("--log_dir", type=str, default=DEFAULT_LOG_DIR)
