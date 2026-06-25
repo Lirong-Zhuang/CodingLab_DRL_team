@@ -1,22 +1,50 @@
+import argparse
 import time
 from torch.utils.tensorboard import SummaryWriter
 import dqn
 import ppo
-# TODO: parse arguments
-import argparse
 import rainbow_dqn
 
-parser = argparse.ArgumentParser()
 
-parser.add_argument('--variant', type=int, default=0, choices=[0, 1, 2])
-parser.add_argument('--seed', type=int, default=777) # seed can be any other number
-parser.add_argument('--data_dir', type=str, default='./data')
-parser.add_argument('--env_version', type=int, default=10, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-parser.add_argument('--network_version', type=int, default=8, choices=[5, 6, 7, 8, 9, 10])
-parser.add_argument('--model_version', type=int, default=1)
-parser.add_argument('--num_episodes', type=int, default=None)
+# Edit these values before running this file directly.
+VARIANT = 0
+SEED = 777
+DATA_DIR = './data'
+NETWORK_VERSION = 11
+ENV_VERSION = 9
+MODEL_VERSION = 3
+NUM_EPISODES = 10000
+ENCODER_PATH = './autoencoder/autoencoder_models/encoder_env9_variant0_v1.pt'
+FREEZE_ENCODER = False
 
-args = parser.parse_args()
+
+class Config:
+    variant = VARIANT
+    seed = SEED
+    data_dir = DATA_DIR
+    env_version = ENV_VERSION
+    network_version = NETWORK_VERSION
+    model_version = MODEL_VERSION
+    num_episodes = NUM_EPISODES
+    encoder_path = ENCODER_PATH
+    freeze_encoder = FREEZE_ENCODER
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--variant", type=int, default=VARIANT, choices=[0, 1, 2])
+    parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument("--data_dir", type=str, default=DATA_DIR)
+    parser.add_argument("--network_version", type=int, default=NETWORK_VERSION)
+    parser.add_argument("--env_version", type=int, default=ENV_VERSION)
+    parser.add_argument("--model_version", type=int, default=MODEL_VERSION)
+    parser.add_argument("--num_episodes", type=int, default=NUM_EPISODES)
+    parser.add_argument("--encoder_path", type=str, default=ENCODER_PATH)
+    parser.add_argument("--freeze_encoder", action="store_true", default=FREEZE_ENCODER)
+    return parser.parse_args()
+
+
+args = parse_args()
 
 
 # set seed
@@ -52,6 +80,7 @@ from environment_v7 import Environment_v7
 from environment_v8 import Environment_v8
 from environment_v9 import Environment_v9
 from environment_v10 import Environment_v10
+from environment_v11 import Environment_v11
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
@@ -72,6 +101,7 @@ def build_env(env_version, variant, data_dir):
         8: Environment_v8,
         9: Environment_v9,
         10: Environment_v10,
+        11: Environment_v11,
     }
     return env_classes[env_version](variant, data_dir)
 
@@ -84,7 +114,14 @@ def build_dqn_network(network_version, env):
         8: rainbow_dqn.DQN_v8,
         9: rainbow_dqn.DQN_v9,
         10: rainbow_dqn.DQN_v10,
+        11: rainbow_dqn.DQN_v11,
     }
+    if network_version == 11:
+        return rainbow_dqn.DQN_v11(
+            env,
+            encoder_path=args.encoder_path,
+            freeze_encoder=args.freeze_encoder,
+        )
     return network_classes[network_version](env)
 
 
@@ -136,7 +173,10 @@ def train_dqn(env):
         if hasattr(network, 'epsilon_decay_steps'):
             network.epsilon_decay_steps = network.num_episodes * 0.8
     model_version = args.model_version
-    note = f'network_version: {args.network_version}, env_version: {args.env_version}'
+    note = (
+        f'network_version: {args.network_version}, env_version: {args.env_version}, '
+        f'encoder_path: {args.encoder_path}, freeze_encoder: {args.freeze_encoder}'
+    )
     ##----------------------------------##
 
     start_time = time.time()
