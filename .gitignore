@@ -16,6 +16,16 @@ env/
 
 # Runtime / output files
 *.json
+videos/
 
 # Model outputs
 models/
+autoencoder/autoencoder_models/
+
+# Keep only TensorBoard event files from autoencoder logs
+autoencoder/autoencoder_logs/*
+!autoencoder/autoencoder_logs/**/
+!autoencoder/autoencoder_logs/**/events.out.tfevents.*
+
+# Local autoencoder smoke/check outputs
+autoencoder/_*/
