@@ -103,6 +103,44 @@ class GridAutoencoderEnv9(nn.Module):
         return reconstructed_x
 
 
+class GridEncoderEnv11(GridEncoderEnv5):
+    def __init__(self, in_channels=7, feature_dim=64, feature_channels=None):
+        super().__init__(
+            in_channels=in_channels,
+            feature_dim=feature_dim,
+            feature_channels=feature_channels,
+        )
+
+
+class GridDecoderEnv11(GridDecoderEnv5):
+    def __init__(self, out_channels=7, feature_dim=64, feature_channels=None):
+        super().__init__(
+            out_channels=out_channels,
+            feature_dim=feature_dim,
+            feature_channels=feature_channels,
+        )
+
+
+class GridAutoencoderEnv11(nn.Module):
+    def __init__(self, in_channels=7, feature_dim=64, feature_channels=None):
+        super().__init__()
+        if feature_channels is not None:
+            feature_dim = feature_channels
+        self.encoder = GridEncoderEnv11(
+            in_channels=in_channels,
+            feature_dim=feature_dim,
+        )
+        self.decoder = GridDecoderEnv11(
+            out_channels=in_channels,
+            feature_dim=feature_dim,
+        )
+
+    def forward(self, x):
+        z = self.encoder(x)
+        reconstructed_x = self.decoder(z)
+        return reconstructed_x
+
+
 # Backward-compatible aliases for older training scripts.
 Encoder = GridEncoderEnv5
 Decoder = GridDecoderEnv5
