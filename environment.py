@@ -26,6 +26,8 @@ class Environment(object):
         self.max_response_time = 15 if self.variant == 2 else 10
         self.reward = 25 if self.variant == 2 else 15
         self.data_dir = data_dir
+        self.feature_mode = "all"
+        self.reward_shaping = True
 
         self.training_episodes = pd.read_csv(self.data_dir + f'/variant_{self.variant}/training_episodes.csv')
         self.training_episodes = self.training_episodes.training_episodes.tolist()
@@ -95,6 +97,16 @@ class Environment(object):
         else:
             done = 0
 
+        old_dist_to_target = abs(self.agent_loc[0] - self.target_loc[0]) + abs(self.agent_loc[1] - self.target_loc[1])
+
+        if self.item_locs:
+            old_dist_to_nearest_item = min(
+                abs(self.agent_loc[0] - item[0]) + abs(self.agent_loc[1] - item[1])
+                for item in self.item_locs
+            )
+        else:
+            old_dist_to_nearest_item = None
+
         # agent movement
         if act != 0:
             if act == 1:  # up
@@ -123,6 +135,31 @@ class Environment(object):
             rew += self.agent_load * self.reward / 2
             self.agent_load = 0
 
+        new_dist_to_target = abs(self.agent_loc[0] - self.target_loc[0]) + abs(self.agent_loc[1] - self.target_loc[1])
+
+        if self.item_locs:
+            new_dist_to_nearest_item = min(
+                abs(self.agent_loc[0] - item[0]) + abs(self.agent_loc[1] - item[1])
+                for item in self.item_locs
+            )
+        else:
+            new_dist_to_nearest_item = None
+
+        # Reward shaping
+        if self.reward_shaping and self.agent_load > 0:
+            # If carrying item, reward moving closer to target
+            if new_dist_to_target < old_dist_to_target:
+                rew += 0.2
+            elif new_dist_to_target > old_dist_to_target:
+                rew -= 0.2
+        elif self.reward_shaping:
+            # If not carrying item, reward moving closer to nearest item
+            if old_dist_to_nearest_item is not None and new_dist_to_nearest_item is not None:
+                if new_dist_to_nearest_item < old_dist_to_nearest_item:
+                    rew += 0.2
+                elif new_dist_to_nearest_item > old_dist_to_nearest_item:
+                    rew -= 0.2
+
         # track how long ago items appeared
         self.item_times = [i + 1 for i in self.item_times]
 
@@ -146,6 +183,131 @@ class Environment(object):
     # TODO: implement function that gives the input features for the neural network(s)
     #       based on the current state of the environment
     def get_obs(self):
-        ...
+        # Basic normalized information
+        step_count_obs = [self.step_count / self.episode_steps]
 
-        return ...
+        agent_loc_obs = [
+            self.agent_loc[0] / (self.vertical_cell_count - 1),
+            self.agent_loc[1] / (self.horizontal_cell_count - 1)
+        ]
+
+        agent_load_obs = [self.agent_load / self.agent_capacity]
+
+        # Grid-based item information
+        item_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
+        item_times_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
+
+        for item_loc, item_time in zip(self.item_locs, self.item_times):
+            idx = item_loc[0] * self.horizontal_cell_count + item_loc[1]
+            item_loc_obs[idx] = 1
+            item_times_obs[idx] = item_time / self.max_response_time
+
+
+        # New engineered features
+
+        max_grid_distance = (
+                self.vertical_cell_count - 1
+                + self.horizontal_cell_count - 1
+        )
+
+        # Distance from agent to target
+        dist_to_target = (
+                                 abs(self.agent_loc[0] - self.target_loc[0])
+                                 + abs(self.agent_loc[1] - self.target_loc[1])
+                         ) / max_grid_distance
+
+        # Number of currently active items
+        num_items = len(self.item_locs) / (
+                self.vertical_cell_count * self.horizontal_cell_count
+        )
+
+        # Free capacity
+        free_capacity = (
+                                self.agent_capacity - self.agent_load
+                        ) / self.agent_capacity
+
+        # Binary carrying feature
+        is_carrying = 1 if self.agent_load > 0 else 0
+
+        if self.item_locs:
+            item_distances = [
+                abs(self.agent_loc[0] - item_loc[0])
+                + abs(self.agent_loc[1] - item_loc[1])
+                for item_loc in self.item_locs
+            ]
+
+            # Distance to nearest item
+            nearest_item_distance = min(item_distances) / max_grid_distance
+
+            # Average distance to all visible items
+            avg_item_distance = (
+                                        sum(item_distances) / len(item_distances)
+                                ) / max_grid_distance
+
+            # Urgency: older items are more urgent
+            oldest_item_time = max(self.item_times) / self.max_response_time
+
+            # Time remaining for most urgent item
+            min_time_remaining = (
+                                         self.max_response_time - max(self.item_times)
+                                 ) / self.max_response_time
+
+        else:
+            nearest_item_distance = 1.0
+            avg_item_distance = 1.0
+            oldest_item_time = 0.0
+            min_time_remaining = 1.0
+
+        engineered_features = [
+            dist_to_target,
+            num_items,
+            free_capacity,
+            is_carrying,
+            nearest_item_distance,
+            avg_item_distance,
+            oldest_item_time,
+            min_time_remaining
+        ]
+
+        obs = (
+                step_count_obs
+                + agent_loc_obs
+                + agent_load_obs
+                + item_loc_obs
+                + item_times_obs
+                + engineered_features
+        )
+
+        if self.feature_mode == "none":
+            engineered_features = []
+
+        elif self.feature_mode == "no_distance":
+            engineered_features = [
+                num_items,
+                free_capacity,
+                is_carrying,
+                oldest_item_time,
+                min_time_remaining
+            ]
+
+        elif self.feature_mode == "no_urgency":
+            engineered_features = [
+                dist_to_target,
+                num_items,
+                free_capacity,
+                is_carrying,
+                nearest_item_distance,
+                avg_item_distance
+            ]
+
+        elif self.feature_mode == "no_capacity":
+            engineered_features = [
+                dist_to_target,
+                num_items,
+                nearest_item_distance,
+                avg_item_distance,
+                oldest_item_time,
+                min_time_remaining
+            ]
+
+        return obs
