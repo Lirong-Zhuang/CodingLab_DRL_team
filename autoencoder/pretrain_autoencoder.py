@@ -393,7 +393,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--env_version", type=int, default=11, choices=[5, 9, 11])
     parser.add_argument("--variant", type=int, default=0, choices=[0, 1, 2])
-    parser.add_argument("--model_version", type=int, default=1)
+    parser.add_argument("--model_version", type=int, default=3)
     parser.add_argument("--data_dir", type=str, default="./data")
     parser.add_argument("--model_dir", type=str, default=DEFAULT_MODEL_DIR)
     parser.add_argument("--log_dir", type=str, default=DEFAULT_LOG_DIR)
@@ -405,7 +405,7 @@ def parse_args():
     parser.add_argument("--feature_channels", type=int, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--validation_interval", type=int, default=100)
     parser.add_argument("--max_train_episodes", type=int, default=None)
-    parser.add_argument("--policy", type=str, default="greedy", choices=["random", "greedy", "mixed"])
+    parser.add_argument("--policy", type=str, default="mixed", choices=["random", "greedy", "mixed"])
     parser.add_argument("--greedy_prob", type=float, default=1.0)
     parser.add_argument("--no_shuffle_episodes", action="store_true")
     parser.add_argument(
