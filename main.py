@@ -81,6 +81,7 @@ from environment_v8 import Environment_v8
 from environment_v9 import Environment_v9
 from environment_v10 import Environment_v10
 from environment_v11 import Environment_v11
+from environment_v12 import Environment_v12
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
@@ -102,6 +103,7 @@ def build_env(env_version, variant, data_dir):
         9: Environment_v9,
         10: Environment_v10,
         11: Environment_v11,
+        12: Environment_v12,
     }
     return env_classes[env_version](variant, data_dir)
 

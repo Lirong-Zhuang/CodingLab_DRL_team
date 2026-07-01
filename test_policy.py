@@ -12,6 +12,7 @@ from environment_v8 import Environment_v8
 from environment_v9 import Environment_v9
 from environment_v10 import Environment_v10
 from environment_v11 import Environment_v11
+from environment_v12 import Environment_v12
 import csv
 import os
 import torch
@@ -19,13 +20,13 @@ import dqn
 import rainbow_dqn
 
 
-MODEL_NAME = 'DQN_v8.11.6_variant_0'
+MODEL_NAME = 'DQN_v11.9.6_variant_0'
 MODEL_PATH = f'./models/{MODEL_NAME}.pt'
 VARIANT = 0
 DATA_DIR = './data'
 NUM_TEST_EPISODES = 100
 RESULT_DIR = './test_result'
-RESULT_FILE_NAME = 'Test_Results_DQN_v8.11.6_variant_0.csv'
+RESULT_FILE_NAME = 'Test_Results_DQN_v11.9.6_variant_0.csv'
 
 
 def test_policy(env):
@@ -33,7 +34,7 @@ def test_policy(env):
     episode_results = []
 
     # network
-    network = rainbow_dqn.DQN_v8(env)
+    network = rainbow_dqn.DQN_v11(env)
     network.q_network.load_state_dict(torch.load(MODEL_PATH, map_location=network.device))
     network.q_network.eval()
     network.epsilon = 0
@@ -78,6 +79,6 @@ def save_test_results(env, episode_results, avg_test_rew):
 
 if __name__ == '__main__':
 
-    env = Environment_v11(variant=VARIANT, data_dir=DATA_DIR)  # initialize the environment
+    env = Environment_v9(variant=VARIANT, data_dir=DATA_DIR)  # initialize the environment
 
     test_policy(env)  # test the trained policy
