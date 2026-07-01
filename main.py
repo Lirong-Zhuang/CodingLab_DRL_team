@@ -14,9 +14,11 @@ NETWORK_VERSION = 11
 ENV_VERSION = 11
 MODEL_VERSION = 3
 NUM_EPISODES = 10000
-ENCODER_PATH = './autoencoder/autoencoder_models/encoder_env11_variant0_v1.pt'
+ENCODER_PATH = './autoencoder/autoencoder_models/encoder_env11_variant0_v2.pt'
 # ENCODER_PATH = None
-FREEZE_ENCODER = False
+FREEZE_ENCODER = True
+ENCODER_TYPE = "cnn"
+GB_WINDOW = 0
 
 
 class Config:
@@ -29,6 +31,8 @@ class Config:
     num_episodes = NUM_EPISODES
     encoder_path = ENCODER_PATH
     freeze_encoder = FREEZE_ENCODER
+    encoder_type = ENCODER_TYPE
+    gb_window = GB_WINDOW
 
 
 def parse_args():
@@ -42,6 +46,8 @@ def parse_args():
     parser.add_argument("--num_episodes", type=int, default=NUM_EPISODES)
     parser.add_argument("--encoder_path", type=str, default=ENCODER_PATH)
     parser.add_argument("--freeze_encoder", action="store_true", default=FREEZE_ENCODER)
+    parser.add_argument("--encoder_type", type=str, default=ENCODER_TYPE, choices=["cnn", "lenet5", "alexnet8", "resnet18"])
+    parser.add_argument("--gb_window", type=int, default=GB_WINDOW)
     return parser.parse_args()
 
 
@@ -86,7 +92,7 @@ from environment_v12 import Environment_v12
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
-model_dir = './models'
+model_dir = './models2'
 os.makedirs(model_dir, exist_ok=True)
 os.makedirs('./logs2', exist_ok=True)
 
@@ -120,10 +126,14 @@ def build_dqn_network(network_version, env):
         11: rainbow_dqn.DQN_v11,
     }
     if network_version == 11:
+        encoder_path = args.encoder_path
+        if isinstance(encoder_path, str) and encoder_path.lower() in {"", "none", "null"}:
+            encoder_path = None
         return rainbow_dqn.DQN_v11(
             env,
-            encoder_path=args.encoder_path,
+            encoder_path=encoder_path,
             freeze_encoder=args.freeze_encoder,
+            encoder_type=args.encoder_type,
         )
     return network_classes[network_version](env)
 
@@ -178,7 +188,8 @@ def train_dqn(env):
     model_version = args.model_version
     note = (
         f'network_version: {args.network_version}, env_version: {args.env_version}, '
-        f'encoder_path: {args.encoder_path}, freeze_encoder: {args.freeze_encoder}'
+        f'encoder_type: {args.encoder_type}, encoder_path: {args.encoder_path}, '
+        f'freeze_encoder: {args.freeze_encoder}'
     )
     ##----------------------------------##
 
@@ -189,7 +200,11 @@ def train_dqn(env):
 
     # best model tracking
     model_path = os.path.join(model_dir, f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}.pt')
+    gb_model_path = os.path.join(model_dir, f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}_GB.pt')
     best_vali_rew = -float('inf')
+    best_gb_rew = -float('inf')
+    gb_window = max(0, args.gb_window)
+    gb_start_episode = max(1, num_episodes - gb_window + 1) if gb_window else num_episodes + 1
 
     # print info
     print(f'Training {network.network_name} on Variant {env.variant}')
@@ -201,7 +216,7 @@ def train_dqn(env):
     # file protection
     run_name = f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}'
     log_dir = f'./logs2/{run_name}'
-    if os.path.exists(model_path) or os.path.exists(log_dir):
+    if os.path.exists(model_path) or os.path.exists(gb_model_path) or os.path.exists(log_dir):
         raise FileExistsError(
             f'Model name already exists: {run_name}. '
             f'Please increase model_version before training.'
@@ -212,6 +227,7 @@ def train_dqn(env):
     writer.add_text('Hyperparameters', f'num_episodes: {network.num_episodes}, batch_size: {network.batch_size}, gamma: {network.gamma}, learning_rate: {network.learning_rate}, epsilon_start: {network.epsilon_start}, epsilon_end: {network.epsilon_end}, epsilon_decay_steps: {network.epsilon_decay_steps}, target_update_freq: {network.target_update_freq}', 0)
     writer.add_text('Model_info', f'Model: {run_name}, Variant: {env.variant}', 0)
     writer.add_text('Note', note, 0)
+    writer.add_text('GB', f'gb_window: {gb_window}, gb_model_path: {gb_model_path}', 0)
 
     # running
     for episode in range(num_episodes):
@@ -260,6 +276,14 @@ def train_dqn(env):
             avg_loss = sum(episode_losses) / len(episode_losses)
             writer.add_scalar('Loss/train', avg_loss, episode + 1)
 
+        if episode + 1 >= gb_start_episode and episode_reward > best_gb_rew:
+            best_gb_rew = episode_reward
+            network.save(gb_model_path)
+            print(
+                f'New GB model saved from last {gb_window} episodes '
+                f'with training reward: {best_gb_rew}'
+            )
+
         # run validation
         if (episode + 1) % vali_interval == 0:
             print(f'Running validation')
@@ -284,6 +308,8 @@ def train_dqn(env):
     # print results
     print(f'Training completed, model has been saved with best validation reward: {best_vali_rew}. Training Time: {hours:.0f}h {minutes:.0f}min {seconds:.2f}s')
     writer.add_text('Result/ModelPath', model_path)
+    writer.add_text('Result/GBModelPath', gb_model_path)
+    writer.add_text('Result/GBReward', str(best_gb_rew))
     writer.close()
 
 
@@ -329,7 +355,11 @@ def train_ppo(env):
 
     # best model tracking
     model_path = os.path.join(model_dir, f'{network.file_name}{model_version}_variant_{env.variant}.pt')
+    gb_model_path = os.path.join(model_dir, f'{network.file_name}{model_version}_variant_{env.variant}_GB.pt')
     best_vali_rew = -float('inf')
+    best_gb_rew = -float('inf')
+    gb_window = max(0, args.gb_window)
+    gb_start_episode = max(1, num_episodes - gb_window + 1) if gb_window else num_episodes + 1
 
     # print info
     print(f'Training {network.network_name} on Variant {env.variant}')
@@ -341,7 +371,7 @@ def train_ppo(env):
     # file protection
     run_name = f'{network.file_name}{model_version}_variant_{env.variant}'
     log_dir = f'./logs/{run_name}'
-    if os.path.exists(model_path) or os.path.exists(log_dir):
+    if os.path.exists(model_path) or os.path.exists(gb_model_path) or os.path.exists(log_dir):
         raise FileExistsError(
             f'Model name already exists: {run_name}. '
             f'Please increase model_version before training.'
@@ -352,6 +382,7 @@ def train_ppo(env):
     writer.add_text('Hyperparameters', f'num_episodes: {network.num_episodes}, rollout_steps: {network.rollout_steps}, gamma: {network.gamma}, learning_rate: {network.learning_rate}, clip_epsilon: {network.clip_epsilon}, update_epochs: {network.update_epochs}, entropy_coef: {network.entropy_coef}, value_coef: {network.value_coef}, max_grad_norm: {network.max_grad_norm}', 0)
     writer.add_text('Model_info', f'Model: {run_name}, Variant: {env.variant}', 0)
     writer.add_text('Note', note, 0)
+    writer.add_text('GB', f'gb_window: {gb_window}, gb_model_path: {gb_model_path}', 0)
 
     rollout_obs = []
     rollout_actions = []
@@ -383,6 +414,14 @@ def train_ppo(env):
                 break
 
         writer.add_scalar('Reward/train', episode_reward, episode + 1)
+
+        if episode + 1 >= gb_start_episode and episode_reward > best_gb_rew:
+            best_gb_rew = episode_reward
+            network.save(gb_model_path)
+            print(
+                f'New GB model saved from last {gb_window} episodes '
+                f'with training reward: {best_gb_rew}'
+            )
 
         # update rollout data
         if (episode + 1) % network.rollout_episodes == 0:
@@ -452,6 +491,8 @@ def train_ppo(env):
     # print results
     print(f'Training completed, model has been saved with best validation reward: {best_vali_rew}. Training Time: {hours:.0f}h {minutes:.0f}min {seconds:.2f}s')
     writer.add_text('Result/ModelPath', model_path)
+    writer.add_text('Result/GBModelPath', gb_model_path)
+    writer.add_text('Result/GBReward', str(best_gb_rew))
     writer.close()
 
 

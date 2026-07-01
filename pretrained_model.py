@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torchvision.models import resnet18
 
 
 class RainbowDuelingDistributionalHead(nn.Module):
@@ -95,10 +96,58 @@ class AlexNet8Encoder(nn.Module):
         return self.feature(x)
 
 
+class ResNet18Encoder(nn.Module):
+    """ResNet18 encoder adapted for small grid observations."""
+
+    def __init__(self, in_channels, feature_dim=128):
+        super().__init__()
+        self.feature_dim = feature_dim
+
+        backbone = resnet18(weights=None)
+        backbone.conv1 = nn.Conv2d(
+            in_channels,
+            64,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
+        backbone.maxpool = nn.Identity()
+        backbone.fc = nn.Identity()
+
+        self.scene_encoder = backbone
+        self.feature = nn.Sequential(
+            nn.Linear(512, feature_dim),
+            nn.ReLU(),
+        )
+
+    def forward(self, x):
+        x = self.scene_encoder(x)
+        return self.feature(x)
+
+
 class RainbowLeNet5QNetwork(nn.Module):
     def __init__(self, in_channels, act_dim, num_atoms, feature_dim=84):
         super().__init__()
         self.encoder = LeNet5Encoder(in_channels, feature_dim)
+        self.q_head = RainbowDuelingDistributionalHead(
+            feature_dim,
+            act_dim,
+            num_atoms,
+        )
+
+    def forward(self, x):
+        features = self.encoder(x)
+        return self.q_head(features)
+
+    def reset_noise(self):
+        pass
+
+
+class RainbowResNet18QNetwork(nn.Module):
+    def __init__(self, in_channels, act_dim, num_atoms, feature_dim=128):
+        super().__init__()
+        self.encoder = ResNet18Encoder(in_channels, feature_dim)
         self.q_head = RainbowDuelingDistributionalHead(
             feature_dim,
             act_dim,
