@@ -11,10 +11,11 @@ VARIANT = 0
 SEED = 777
 DATA_DIR = './data'
 NETWORK_VERSION = 11
-ENV_VERSION = 9
+ENV_VERSION = 11
 MODEL_VERSION = 3
 NUM_EPISODES = 10000
-ENCODER_PATH = './autoencoder/autoencoder_models/encoder_env9_variant0_v1.pt'
+ENCODER_PATH = './autoencoder/autoencoder_models/encoder_env11_variant0_v1.pt'
+# ENCODER_PATH = None
 FREEZE_ENCODER = False
 
 
