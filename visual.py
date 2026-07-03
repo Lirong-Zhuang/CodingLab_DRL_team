@@ -23,6 +23,7 @@ from environment_v8 import Environment_v8
 from environment_v9 import Environment_v9
 from environment_v10 import Environment_v10
 from environment_v11 import Environment_v11
+from environment_v12 import Environment_v12
 
 
 ACTION_NAMES = {
@@ -35,22 +36,23 @@ ACTION_NAMES = {
 
 
 # Edit these values, then run this file directly.
-POLICY = "greedy_astar"  # "greedy", "greedy_astar", or "model"
-MODEL_PATH = "./models/DQN_v8.9.2_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
+POLICY = "model"  # "greedy", "greedy_astar", or "model"
+MODEL_PATH = "./models/DQN_v8.11.10_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
 VARIANT = 0
-ENV_VERSION = 9
+ENV_VERSION = 11
 NETWORK_VERSION = 8
 DATA_DIR = "./data"
-EPISODE_ID = "000"
+EPISODE_ID = "047"
 MAX_STEPS = None
 INTERVAL = 350
-SAVE_PATH = "./videos/greedy_astar_env9_variant0_test_000.mp4"
+SAVE_PATH = "./videos/8.11.10_test_047.mp4"
 VIDEO_FPS = 4
 VIDEO_DPI = 120
 FFMPEG_PATH = None  # e.g. "/opt/homebrew/bin/ffmpeg"; leave None to use system PATH
 CPU = False
 SHOW = True
 REPEAT = True
+Q_LOG_STEPS = "169-174"  # e.g. "169-174" or "169,170,171"; empty string disables printing
 
 
 ENV_CLASSES = {
@@ -65,6 +67,7 @@ ENV_CLASSES = {
     9: Environment_v9,
     10: Environment_v10,
     11: Environment_v11,
+    12: Environment_v12,
 }
 
 
@@ -392,7 +395,69 @@ def select_test_episode(env, episode_id):
     return episode
 
 
-def rollout_episode(env, policy, episode_id="000", max_steps=None):
+def parse_step_range(step_range):
+    if step_range is None:
+        return set()
+    if isinstance(step_range, (list, tuple, set)):
+        return {int(step) for step in step_range}
+
+    steps = set()
+    for part in str(step_range).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            start, end = part.split("-", 1)
+            steps.update(range(int(start), int(end) + 1))
+        else:
+            steps.add(int(part))
+    return steps
+
+
+def action_q_values(policy, obs):
+    if not hasattr(policy, "q_network"):
+        return None
+
+    device = getattr(policy, "device", torch.device("cpu"))
+    obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
+    was_training = policy.q_network.training
+    policy.q_network.eval()
+
+    try:
+        with torch.no_grad():
+            network_output = policy.q_network(obs_tensor)
+            if network_output.dim() == 3 and hasattr(policy, "support"):
+                q_values = (network_output * policy.support.view(1, 1, -1)).sum(dim=2)
+            else:
+                q_values = network_output
+    finally:
+        if was_training:
+            policy.q_network.train()
+
+    return q_values.squeeze(0).detach().cpu()
+
+
+def select_action_with_debug(policy, obs):
+    q_values = action_q_values(policy, obs)
+    if q_values is None:
+        action = int(policy.select_action(obs))
+        return action, None
+
+    action = int(torch.argmax(q_values).item())
+    if hasattr(policy, "q_network") and hasattr(policy.q_network, "reset_noise"):
+        policy.q_network.reset_noise()
+    return action, q_values.tolist()
+
+
+def print_q_debug(step, q_values, action):
+    q_text = ", ".join(
+        f"{idx} ({ACTION_NAMES[idx]}): {value:.4f}"
+        for idx, value in enumerate(q_values)
+    )
+    print(f"Step {step}: Q-values [{q_text}] -> selected action {action} ({ACTION_NAMES[action]})")
+
+
+def rollout_episode(env, policy, episode_id="000", max_steps=None, q_log_steps=None):
     original_test_episodes = deepcopy(env.test_episodes)
     selected_episode_id = select_test_episode(env, episode_id)
     obs = env.reset("testing")
@@ -404,6 +469,7 @@ def rollout_episode(env, policy, episode_id="000", max_steps=None):
     frames = []
     total_reward = 0.0
     max_steps = env.episode_steps if max_steps is None else min(max_steps, env.episode_steps)
+    q_log_steps = parse_step_range(q_log_steps)
 
     try:
         for _ in range(max_steps + 1):
@@ -412,7 +478,13 @@ def rollout_episode(env, policy, episode_id="000", max_steps=None):
             done = 0
 
             if env.step_count < max_steps:
-                action = int(policy.select_action(obs))
+                next_step = env.step_count + 1
+                if next_step in q_log_steps:
+                    action, q_values = select_action_with_debug(policy, obs)
+                    if q_values is not None:
+                        print_q_debug(next_step, q_values, action)
+                else:
+                    action = int(policy.select_action(obs))
                 reward, next_obs, done = env.step(action)
                 total_reward += reward
                 obs = next_obs
@@ -458,12 +530,14 @@ def visualize_episode(
     save_path=None,
     show=True,
     repeat=True,
+    q_log_steps=None,
 ):
     frames = rollout_episode(
         env,
         policy,
         episode_id=episode_id,
         max_steps=max_steps,
+        q_log_steps=q_log_steps,
     )
     fig, ax = plt.subplots(figsize=(8.8, 5.6))
     fig.canvas.manager.set_window_title("Grid World Policy Visualizer")
@@ -635,6 +709,7 @@ def parse_args():
     parser.add_argument("--cpu", action="store_true", default=CPU)
     parser.add_argument("--no_show", action="store_true", default=not SHOW)
     parser.add_argument("--no_repeat", action="store_true", default=not REPEAT)
+    parser.add_argument("--q_log_steps", type=str, default=Q_LOG_STEPS)
     return parser.parse_args()
 
 
@@ -660,6 +735,7 @@ def main():
         save_path=args.save_path,
         show=not args.no_show,
         repeat=not args.no_repeat,
+        q_log_steps=args.q_log_steps,
     )
 
 

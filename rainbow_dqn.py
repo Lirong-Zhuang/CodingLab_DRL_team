@@ -5,6 +5,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision.models import resnet18
+from pretrained_model import (
+    RainbowAlexNet8QNetwork,
+    RainbowLeNet5QNetwork,
+    RainbowResNet18QNetwork as PretrainedRainbowResNet18QNetwork,
+)
 
 # Dueling DQN network architecture
 class DuelingQNetwork(nn.Module):
@@ -1331,9 +1336,16 @@ class DQN_v10:
 
 # Full rainbow DQN for CNN using separated encoder and Q head
 class DQN_v11:
-    def __init__(self, env, encoder_path=None, freeze_encoder=False):
+    def __init__(self, env, encoder_path=None, freeze_encoder=False, encoder_type="cnn"):
         if freeze_encoder and encoder_path is None:
             raise ValueError("freeze_encoder=True requires a pretrained encoder_path.")
+
+        encoder_type = encoder_type.lower()
+        valid_encoder_types = {"cnn", "lenet5", "alexnet8", "resnet18"}
+        if encoder_type not in valid_encoder_types:
+            raise ValueError(
+                f"encoder_type must be one of {sorted(valid_encoder_types)}, got {encoder_type!r}"
+            )
 
         self.env = env
         self.variant = self.env.variant
@@ -1343,6 +1355,7 @@ class DQN_v11:
         self.training_step = 0
         self.encoder_path = encoder_path
         self.freeze_encoder = freeze_encoder
+        self.encoder_type = encoder_type
 
         initial_obs = self.env.reset('training')  # get initial obs 
         self.in_channels = initial_obs.shape[0]
@@ -1406,17 +1419,40 @@ class DQN_v11:
         self.loss_fn = nn.SmoothL1Loss(reduction='none')
 
     def build_q_network(self):
-        network = RainbowCNNQNetwork_autoencoder(
+        network_classes = {
+            "cnn": RainbowCNNQNetwork_autoencoder,
+            "lenet5": RainbowLeNet5QNetwork,
+            "alexnet8": RainbowAlexNet8QNetwork,
+            "resnet18": PretrainedRainbowResNet18QNetwork,
+        }
+        return network_classes[self.encoder_type](
             self.in_channels,
             self.act_dim,
             self.num_atoms,
             feature_dim=self.feature_dim,
         )
-        return network
 
     def load_encoder(self, encoder_path):
         checkpoint = torch.load(encoder_path, map_location=self.device)
         if isinstance(checkpoint, dict) and "encoder_state_dict" in checkpoint:
+            checkpoint_encoder_type = checkpoint.get("encoder_type")
+            checkpoint_feature_dim = checkpoint.get("feature_dim")
+            checkpoint_in_channels = checkpoint.get("in_channels")
+            if checkpoint_encoder_type is not None and checkpoint_encoder_type != self.encoder_type:
+                raise ValueError(
+                    f"Encoder type mismatch: checkpoint has {checkpoint_encoder_type!r}, "
+                    f"but DQN_v11 was built with {self.encoder_type!r}."
+                )
+            if checkpoint_feature_dim is not None and checkpoint_feature_dim != self.feature_dim:
+                raise ValueError(
+                    f"Encoder feature_dim mismatch: checkpoint has {checkpoint_feature_dim}, "
+                    f"but DQN_v11 expects {self.feature_dim}."
+                )
+            if checkpoint_in_channels is not None and checkpoint_in_channels != self.in_channels:
+                raise ValueError(
+                    f"Encoder input channel mismatch: checkpoint has {checkpoint_in_channels}, "
+                    f"but env observations have {self.in_channels} channels."
+                )
             encoder_state_dict = checkpoint["encoder_state_dict"]
         else:
             encoder_state_dict = checkpoint
@@ -1427,9 +1463,15 @@ class DQN_v11:
             return np.random.randint(self.act_dim)
 
         obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
-        with torch.no_grad():
-            action_probs = self.q_network(obs_tensor)
-            q_values = (action_probs * self.support.view(1, 1, -1)).sum(dim=2) 
+        was_training = self.q_network.training
+        self.q_network.eval()
+        try:
+            with torch.no_grad():
+                action_probs = self.q_network(obs_tensor)
+                q_values = (action_probs * self.support.view(1, 1, -1)).sum(dim=2)
+        finally:
+            if was_training:
+                self.q_network.train()
         act = torch.argmax(q_values, dim=1).item()
         self.q_network.reset_noise()
         return int(act)
