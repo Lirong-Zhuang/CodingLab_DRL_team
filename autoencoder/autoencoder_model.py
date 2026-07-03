@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from pretrained_model import AlexNet8Encoder, LeNet5Encoder, ResNet18Encoder
+
 
 class GridEncoderEnv5(nn.Module):
     def __init__(self, in_channels=5, feature_dim=64, feature_channels=None):
@@ -139,6 +141,56 @@ class GridAutoencoderEnv11(nn.Module):
         z = self.encoder(x)
         reconstructed_x = self.decoder(z)
         return reconstructed_x
+
+
+class FlexibleGridAutoencoder(nn.Module):
+    def __init__(self, encoder, out_channels, feature_dim=64, feature_channels=None):
+        super().__init__()
+        if feature_channels is not None:
+            feature_dim = feature_channels
+        self.encoder = encoder
+        self.decoder = GridDecoderEnv5(
+            out_channels=out_channels,
+            feature_dim=feature_dim,
+        )
+
+    def forward(self, x):
+        z = self.encoder(x)
+        return self.decoder(z)
+
+
+def build_autoencoder(in_channels, feature_dim=64, encoder_type="cnn", feature_channels=None):
+    if feature_channels is not None:
+        feature_dim = feature_channels
+
+    encoder_type = encoder_type.lower()
+    encoder_classes = {
+        "lenet5": LeNet5Encoder,
+        "alexnet8": AlexNet8Encoder,
+        "resnet18": ResNet18Encoder,
+    }
+
+    if encoder_type == "cnn":
+        if in_channels == 5:
+            return GridAutoencoderEnv5(in_channels=in_channels, feature_dim=feature_dim)
+        if in_channels == 6:
+            return GridAutoencoderEnv9(in_channels=in_channels, feature_dim=feature_dim)
+        if in_channels == 7:
+            return GridAutoencoderEnv11(in_channels=in_channels, feature_dim=feature_dim)
+        encoder = GridEncoderEnv5(in_channels=in_channels, feature_dim=feature_dim)
+    elif encoder_type in encoder_classes:
+        encoder = encoder_classes[encoder_type](in_channels, feature_dim=feature_dim)
+    else:
+        raise ValueError(
+            "encoder_type must be one of ['cnn', 'lenet5', 'alexnet8', 'resnet18'], "
+            f"got {encoder_type!r}."
+        )
+
+    return FlexibleGridAutoencoder(
+        encoder=encoder,
+        out_channels=in_channels,
+        feature_dim=feature_dim,
+    )
 
 
 # Backward-compatible aliases for older training scripts.

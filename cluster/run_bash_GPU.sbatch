@@ -3,11 +3,11 @@
 #SBATCH -p lrz-dgx-a100-80x8
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
-#SBATCH -o slurm-%x-%j.out
-#SBATCH -e slurm-%x-%j.err
+#SBATCH -o slurm_logs/slurm-%x-%j.out
+#SBATCH -e slurm_logs/slurm-%x-%j.err
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=lirong.zhuang@tum.de
-#SBATCH --time=6:00:00
+#SBATCH --time=24:00:00
 
 
 PROJECT_DIR="${PROJECT_DIR:-$SLURM_SUBMIT_DIR}"
@@ -24,9 +24,7 @@ srun --mpi=pmi2 \
        --num_episodes="${NUM_EPISODES}" \
        --variant="${VARIANT}" \
        --seed="${SEED}" \
-       --data_dir=/mnt/code/data \
-       --encoder_path="${ENCODER_PATH}" \
-       ${FREEZE_ENCODER:+--freeze_encoder}
+       --data_dir=/mnt/code/data
 
 				
 						

@@ -10,15 +10,15 @@ import rainbow_dqn
 VARIANT = 0
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = 11
+NETWORK_VERSION = 8
 ENV_VERSION = 11
-MODEL_VERSION = 3
-NUM_EPISODES = 10000
-ENCODER_PATH = './autoencoder/autoencoder_models/encoder_env11_variant0_v2.pt'
-# ENCODER_PATH = None
-FREEZE_ENCODER = True
+MODEL_VERSION = 23
+NUM_EPISODES = 30000
+ENCODER_PATH = None
+FREEZE_ENCODER = False
 ENCODER_TYPE = "cnn"
 GB_WINDOW = 0
+GB_WINDOWS = [1000, 2000, 3000, 4000, 5000]
 
 
 class Config:
@@ -200,11 +200,26 @@ def train_dqn(env):
 
     # best model tracking
     model_path = os.path.join(model_dir, f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}.pt')
-    gb_model_path = os.path.join(model_dir, f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}_GB.pt')
     best_vali_rew = -float('inf')
-    best_gb_rew = -float('inf')
-    gb_window = max(0, args.gb_window)
-    gb_start_episode = max(1, num_episodes - gb_window + 1) if gb_window else num_episodes + 1
+    gb_windows = sorted(
+        {
+            window
+            for window in GB_WINDOWS + ([args.gb_window] if args.gb_window else [])
+            if window > 0
+        }
+    )
+    gb_model_paths = {
+        window: os.path.join(
+            model_dir,
+            f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}_GB{window}.pt'
+        )
+        for window in gb_windows
+    }
+    best_gb_rews = {window: -float('inf') for window in gb_windows}
+    gb_start_episodes = {
+        window: max(1, num_episodes - window + 1)
+        for window in gb_windows
+    }
 
     # print info
     print(f'Training {network.network_name} on Variant {env.variant}')
@@ -216,7 +231,12 @@ def train_dqn(env):
     # file protection
     run_name = f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}'
     log_dir = f'./logs2/{run_name}'
-    if os.path.exists(model_path) or os.path.exists(gb_model_path) or os.path.exists(log_dir):
+    existing_gb_model_paths = [
+        path
+        for path in gb_model_paths.values()
+        if os.path.exists(path)
+    ]
+    if os.path.exists(model_path) or existing_gb_model_paths or os.path.exists(log_dir):
         raise FileExistsError(
             f'Model name already exists: {run_name}. '
             f'Please increase model_version before training.'
@@ -227,7 +247,7 @@ def train_dqn(env):
     writer.add_text('Hyperparameters', f'num_episodes: {network.num_episodes}, batch_size: {network.batch_size}, gamma: {network.gamma}, learning_rate: {network.learning_rate}, epsilon_start: {network.epsilon_start}, epsilon_end: {network.epsilon_end}, epsilon_decay_steps: {network.epsilon_decay_steps}, target_update_freq: {network.target_update_freq}', 0)
     writer.add_text('Model_info', f'Model: {run_name}, Variant: {env.variant}', 0)
     writer.add_text('Note', note, 0)
-    writer.add_text('GB', f'gb_window: {gb_window}, gb_model_path: {gb_model_path}', 0)
+    writer.add_text('GB', f'gb_windows: {gb_windows}, gb_model_paths: {gb_model_paths}', 0)
 
     # running
     for episode in range(num_episodes):
@@ -276,13 +296,14 @@ def train_dqn(env):
             avg_loss = sum(episode_losses) / len(episode_losses)
             writer.add_scalar('Loss/train', avg_loss, episode + 1)
 
-        if episode + 1 >= gb_start_episode and episode_reward > best_gb_rew:
-            best_gb_rew = episode_reward
-            network.save(gb_model_path)
-            print(
-                f'New GB model saved from last {gb_window} episodes '
-                f'with training reward: {best_gb_rew}'
-            )
+        for gb_window in gb_windows:
+            if episode + 1 >= gb_start_episodes[gb_window] and episode_reward > best_gb_rews[gb_window]:
+                best_gb_rews[gb_window] = episode_reward
+                network.save(gb_model_paths[gb_window])
+                print(
+                    f'New GB{gb_window} model saved from last {gb_window} episodes '
+                    f'with training reward: {best_gb_rews[gb_window]}'
+                )
 
         # run validation
         if (episode + 1) % vali_interval == 0:
@@ -308,8 +329,9 @@ def train_dqn(env):
     # print results
     print(f'Training completed, model has been saved with best validation reward: {best_vali_rew}. Training Time: {hours:.0f}h {minutes:.0f}min {seconds:.2f}s')
     writer.add_text('Result/ModelPath', model_path)
-    writer.add_text('Result/GBModelPath', gb_model_path)
-    writer.add_text('Result/GBReward', str(best_gb_rew))
+    for gb_window in gb_windows:
+        writer.add_text(f'Result/GB{gb_window}ModelPath', gb_model_paths[gb_window])
+        writer.add_text(f'Result/GB{gb_window}Reward', str(best_gb_rews[gb_window]))
     writer.close()
 
 

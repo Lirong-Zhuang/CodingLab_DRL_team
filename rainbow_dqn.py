@@ -1435,6 +1435,24 @@ class DQN_v11:
     def load_encoder(self, encoder_path):
         checkpoint = torch.load(encoder_path, map_location=self.device)
         if isinstance(checkpoint, dict) and "encoder_state_dict" in checkpoint:
+            checkpoint_encoder_type = checkpoint.get("encoder_type")
+            checkpoint_feature_dim = checkpoint.get("feature_dim")
+            checkpoint_in_channels = checkpoint.get("in_channels")
+            if checkpoint_encoder_type is not None and checkpoint_encoder_type != self.encoder_type:
+                raise ValueError(
+                    f"Encoder type mismatch: checkpoint has {checkpoint_encoder_type!r}, "
+                    f"but DQN_v11 was built with {self.encoder_type!r}."
+                )
+            if checkpoint_feature_dim is not None and checkpoint_feature_dim != self.feature_dim:
+                raise ValueError(
+                    f"Encoder feature_dim mismatch: checkpoint has {checkpoint_feature_dim}, "
+                    f"but DQN_v11 expects {self.feature_dim}."
+                )
+            if checkpoint_in_channels is not None and checkpoint_in_channels != self.in_channels:
+                raise ValueError(
+                    f"Encoder input channel mismatch: checkpoint has {checkpoint_in_channels}, "
+                    f"but env observations have {self.in_channels} channels."
+                )
             encoder_state_dict = checkpoint["encoder_state_dict"]
         else:
             encoder_state_dict = checkpoint

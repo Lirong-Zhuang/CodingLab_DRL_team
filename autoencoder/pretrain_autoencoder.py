@@ -11,13 +11,11 @@ import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, TensorDataset
 
-from autoencoder_model import GridAutoencoderEnv5, GridAutoencoderEnv9, GridAutoencoderEnv11
-
-
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from autoencoder_model import build_autoencoder
 from environment_v5 import Environment_v5
 from environment_v9 import Environment_v9
 from environment_v11 import Environment_v11
@@ -191,6 +189,7 @@ def format_hyperparameters(args, device, train_episodes, val_episodes, test_epis
         "learning_rate": args.learning_rate,
         "weight_decay": args.weight_decay,
         "feature_dim": args.feature_dim,
+        "encoder_type": args.encoder_type,
         "validation_interval": args.validation_interval,
         "max_train_episodes": args.max_train_episodes,
         "policy": args.policy,
@@ -244,11 +243,6 @@ def train_autoencoder(args):
         9: Environment_v9,
         11: Environment_v11,
     }
-    autoencoder_classes = {
-        5: GridAutoencoderEnv5,
-        9: GridAutoencoderEnv9,
-        11: GridAutoencoderEnv11,
-    }
     train_env = env_classes[args.env_version](variant=args.variant, data_dir=args.data_dir)
     val_env = env_classes[args.env_version](variant=args.variant, data_dir=args.data_dir)
     initial_obs = train_env.reset("training")
@@ -260,9 +254,10 @@ def train_autoencoder(args):
             f"but --channel_weights has {len(args.channel_weights)} values."
         )
 
-    model = autoencoder_classes[args.env_version](
+    model = build_autoencoder(
         in_channels=in_channels,
         feature_dim=args.feature_dim,
+        encoder_type=args.encoder_type,
     ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     channel_weights = torch.tensor(args.channel_weights, dtype=torch.float32)
@@ -333,6 +328,7 @@ def train_autoencoder(args):
                     "env_version": args.env_version,
                     "in_channels": in_channels,
                     "feature_dim": args.feature_dim,
+                    "encoder_type": args.encoder_type,
                     "channel_weights": args.channel_weights,
                     "epoch": epoch + 1,
                     "episodes_seen": (epoch * len(epoch_train_episodes)) + episode_position,
@@ -359,14 +355,15 @@ def train_autoencoder(args):
 
     training_time = time.time() - start_time
     os.makedirs(args.model_dir, exist_ok=True)
-    autoencoder_path = os.path.join(
-        args.model_dir,
-        f"autoencoder_env{args.env_version}_variant{args.variant}_v{args.model_version}.pt",
-    )
-    encoder_path = os.path.join(
-        args.model_dir,
-        f"encoder_env{args.env_version}_variant{args.variant}_v{args.model_version}.pt",
-    )
+    if args.encoder_type == "cnn":
+        file_suffix = f"env{args.env_version}_variant{args.variant}_v{args.model_version}"
+    else:
+        file_suffix = (
+            f"{args.encoder_type}_env{args.env_version}"
+            f"_variant{args.variant}_v{args.model_version}"
+        )
+    autoencoder_path = os.path.join(args.model_dir, f"autoencoder_{file_suffix}.pt")
+    encoder_path = os.path.join(args.model_dir, f"encoder_{file_suffix}.pt")
 
     if not args.overwrite:
         for path in [autoencoder_path, encoder_path]:
@@ -374,7 +371,17 @@ def train_autoencoder(args):
                 raise FileExistsError(f"{path} already exists. Use --overwrite to replace it.")
 
     torch.save(best_state, autoencoder_path)
-    torch.save(best_state["encoder_state_dict"], encoder_path)
+    torch.save(
+        {
+            "encoder_state_dict": best_state["encoder_state_dict"],
+            "encoder_type": best_state["encoder_type"],
+            "env_version": best_state["env_version"],
+            "in_channels": best_state["in_channels"],
+            "feature_dim": best_state["feature_dim"],
+            "val_loss": best_state["val_loss"],
+        },
+        encoder_path,
+    )
 
     writer.add_text("Result/AutoencoderPath", autoencoder_path, 0)
     writer.add_text("Result/EncoderPath", encoder_path, 0)
@@ -393,19 +400,25 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--env_version", type=int, default=11, choices=[5, 9, 11])
     parser.add_argument("--variant", type=int, default=0, choices=[0, 1, 2])
-    parser.add_argument("--model_version", type=int, default=3)
+    parser.add_argument("--model_version", type=int, default=1)
     parser.add_argument("--data_dir", type=str, default="./data")
     parser.add_argument("--model_dir", type=str, default=DEFAULT_MODEL_DIR)
     parser.add_argument("--log_dir", type=str, default=DEFAULT_LOG_DIR)
-    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--learning_rate", type=float, default=1e-3)
     parser.add_argument("--weight_decay", type=float, default=1e-5)
     parser.add_argument("--feature_dim", type=int, default=64)
     parser.add_argument("--feature_channels", type=int, default=None, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--encoder_type",
+        type=str,
+        default="lenet5",
+        choices=["cnn", "lenet5", "alexnet8", "resnet18"],
+    )
     parser.add_argument("--validation_interval", type=int, default=100)
     parser.add_argument("--max_train_episodes", type=int, default=None)
-    parser.add_argument("--policy", type=str, default="mixed", choices=["random", "greedy", "mixed"])
+    parser.add_argument("--policy", type=str, default="greedy", choices=["random", "greedy", "mixed"])
     parser.add_argument("--greedy_prob", type=float, default=1.0)
     parser.add_argument("--no_shuffle_episodes", action="store_true")
     parser.add_argument(
