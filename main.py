@@ -10,17 +10,17 @@ import rainbow_dqn
 VARIANT = 0
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = 8
-ENV_VERSION = 11
-MODEL_VERSION = 24
-NUM_EPISODES = 30000
-ENCODER_PATH = './autoencoder/autoencoder_models/encoder_resnet18_env11_variant0_v1.pt'
+NETWORK_VERSION = 11
+ENV_VERSION = 9
+MODEL_VERSION = 10
+NUM_EPISODES = 10000
+ENCODER_PATH = './autoencoder/autoencoder_models/encoder_resnet18_env9_variant0_v2.pt'
 FREEZE_ENCODER = False
 ENCODER_TYPE = "resnet18"
 GB_WINDOW = 0
 # GB output is disabled for this run. Keep the old windows here for quick restore.
-GB_WINDOWS = [1000, 2000, 3000, 4000, 5000]
-# GB_WINDOWS = []
+# GB_WINDOWS = [1000, 2000, 3000, 4000, 5000]
+GB_WINDOWS = []
 
 
 class Config:
@@ -88,6 +88,7 @@ from environment_v6 import Environment_v6
 from environment_v7 import Environment_v7
 from environment_v8 import Environment_v8
 from environment_v9 import Environment_v9
+from environment_v91 import Environment_v91
 from environment_v10 import Environment_v10
 from environment_v11 import Environment_v11
 from environment_v12 import Environment_v12
@@ -110,6 +111,7 @@ def build_env(env_version, variant, data_dir):
         7: Environment_v7,
         8: Environment_v8,
         9: Environment_v9,
+        91: Environment_v91,
         10: Environment_v10,
         11: Environment_v11,
         12: Environment_v12,
@@ -218,6 +220,7 @@ def train_dqn(env):
         for window in gb_windows
     }
     best_gb_rews = {window: -float('inf') for window in gb_windows}
+    gb_saved_episodes = {window: None for window in gb_windows}
     gb_start_episodes = {
         window: max(1, num_episodes - window + 1)
         for window in gb_windows
@@ -298,21 +301,23 @@ def train_dqn(env):
             avg_loss = sum(episode_losses) / len(episode_losses)
             writer.add_scalar('Loss/train', avg_loss, episode + 1)
 
-        for gb_window in gb_windows:
-            if episode + 1 >= gb_start_episodes[gb_window] and episode_reward > best_gb_rews[gb_window]:
-                best_gb_rews[gb_window] = episode_reward
-                network.save(gb_model_paths[gb_window])
-                print(
-                    f'New GB{gb_window} model saved from last {gb_window} episodes '
-                    f'with training reward: {best_gb_rews[gb_window]}'
-                )
-
         # run validation
         if (episode + 1) % vali_interval == 0:
             print(f'Running validation')
             avg_vali_rew = validate_dqn(env, network, num_validation_episodes)
             print(f'End of validation, Average Validation Reward: {avg_vali_rew}')
             writer.add_scalar('Reward/validation', avg_vali_rew, episode + 1)
+
+            for gb_window in gb_windows:
+                if episode + 1 >= gb_start_episodes[gb_window] and avg_vali_rew > best_gb_rews[gb_window]:
+                    best_gb_rews[gb_window] = avg_vali_rew
+                    gb_saved_episodes[gb_window] = episode + 1
+                    network.save(gb_model_paths[gb_window])
+                    print(
+                        f'New GB{gb_window} model saved from last {gb_window} episodes '
+                        f'at episode {gb_saved_episodes[gb_window]} '
+                        f'with average validation reward: {best_gb_rews[gb_window]}'
+                    )
 
             # save model if it is the best so far
             if avg_vali_rew > best_vali_rew:
@@ -332,8 +337,13 @@ def train_dqn(env):
     print(f'Training completed, model has been saved with best validation reward: {best_vali_rew}. Training Time: {hours:.0f}h {minutes:.0f}min {seconds:.2f}s')
     writer.add_text('Result/ModelPath', model_path)
     for gb_window in gb_windows:
+        print(
+            f'GB{gb_window} saved at episode {gb_saved_episodes[gb_window]} '
+            f'with average validation reward: {best_gb_rews[gb_window]}'
+        )
         writer.add_text(f'Result/GB{gb_window}ModelPath', gb_model_paths[gb_window])
-        writer.add_text(f'Result/GB{gb_window}Reward', str(best_gb_rews[gb_window]))
+        writer.add_text(f'Result/GB{gb_window}Episode', str(gb_saved_episodes[gb_window]))
+        writer.add_text(f'Result/GB{gb_window}ValidationReward', str(best_gb_rews[gb_window]))
     writer.close()
 
 
@@ -382,6 +392,7 @@ def train_ppo(env):
     gb_model_path = os.path.join(model_dir, f'{network.file_name}{model_version}_variant_{env.variant}_GB.pt')
     best_vali_rew = -float('inf')
     best_gb_rew = -float('inf')
+    gb_saved_episode = None
     gb_window = max(0, args.gb_window)
     gb_start_episode = max(1, num_episodes - gb_window + 1) if gb_window else num_episodes + 1
 
@@ -439,14 +450,6 @@ def train_ppo(env):
 
         writer.add_scalar('Reward/train', episode_reward, episode + 1)
 
-        if episode + 1 >= gb_start_episode and episode_reward > best_gb_rew:
-            best_gb_rew = episode_reward
-            network.save(gb_model_path)
-            print(
-                f'New GB model saved from last {gb_window} episodes '
-                f'with training reward: {best_gb_rew}'
-            )
-
         # update rollout data
         if (episode + 1) % network.rollout_episodes == 0:
             returns, advantages = network.compute_returns(
@@ -498,6 +501,16 @@ def train_ppo(env):
             print(f'End of validation, Average Validation Reward: {avg_vali_rew}')
             writer.add_scalar('Reward/validation', avg_vali_rew, episode + 1)
 
+            if episode + 1 >= gb_start_episode and avg_vali_rew > best_gb_rew:
+                best_gb_rew = avg_vali_rew
+                gb_saved_episode = episode + 1
+                network.save(gb_model_path)
+                print(
+                    f'New GB model saved from last {gb_window} episodes '
+                    f'at episode {gb_saved_episode} '
+                    f'with average validation reward: {best_gb_rew}'
+                )
+
             # save model if it is the best so far
             if avg_vali_rew > best_vali_rew:
                 best_vali_rew = avg_vali_rew
@@ -514,9 +527,11 @@ def train_ppo(env):
 
     # print results
     print(f'Training completed, model has been saved with best validation reward: {best_vali_rew}. Training Time: {hours:.0f}h {minutes:.0f}min {seconds:.2f}s')
+    print(f'GB saved at episode {gb_saved_episode} with average validation reward: {best_gb_rew}')
     writer.add_text('Result/ModelPath', model_path)
     writer.add_text('Result/GBModelPath', gb_model_path)
-    writer.add_text('Result/GBReward', str(best_gb_rew))
+    writer.add_text('Result/GBEpisode', str(gb_saved_episode))
+    writer.add_text('Result/GBValidationReward', str(best_gb_rew))
     writer.close()
 
 

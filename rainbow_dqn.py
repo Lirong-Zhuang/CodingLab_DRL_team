@@ -179,6 +179,52 @@ class RainbowCNNQNetwork(nn.Module):
     def reset_noise(self):
         pass
 
+
+class RainbowCNNQNetwork_old(nn.Module):
+    def __init__(self, in_channels, act_dim, num_atoms):
+        super().__init__()
+        self.act_dim = act_dim
+        self.num_atoms = num_atoms
+
+        self.cnn = nn.Sequential(
+            nn.Conv2d(in_channels, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=3, padding=0),
+            nn.ReLU(),
+            nn.Flatten()
+        )
+
+        self.feature = nn.Sequential(
+            nn.Linear(32 * 3 * 3, 64),
+            nn.ReLU()
+        )
+
+        self.value_stream = nn.Sequential(
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, num_atoms)
+        )
+
+        self.advantage_stream = nn.Sequential(
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, act_dim * num_atoms)
+        )
+
+    def forward(self, x):
+        features = self.cnn(x)
+        features = self.feature(features)
+
+        value = self.value_stream(features).view(-1, 1, self.num_atoms)
+        advantage = self.advantage_stream(features).view(-1, self.act_dim, self.num_atoms)
+
+        logits = value + advantage - advantage.mean(dim=1, keepdim=True)
+        return torch.softmax(logits, dim=-1)
+
+    def reset_noise(self):
+        pass
+
+
 class RainbowCNNEncoder(nn.Module):
     def __init__(self, in_channels, feature_dim=64):
         super().__init__()
@@ -972,7 +1018,8 @@ class DQN_v8:
 
         self.epsilon_start = 1.0
         self.epsilon_end = 0.05
-        self.epsilon_decay_steps = self.num_episodes * 0.8
+        # self.epsilon_decay_steps = self.num_episodes * 0.8
+        self.epsilon_decay_steps = 8000
         self.epsilon = self.epsilon_start
 
         self.n_step = 1
@@ -1130,6 +1177,12 @@ class DQN_v8:
 
     def save(self, model_path):
         torch.save(self.q_network.state_dict(), model_path)
+
+
+class DQN_v8_old(DQN_v8):
+    def build_q_network(self):
+        network = RainbowCNNQNetwork_old(self.in_channels, self.act_dim, self.num_atoms)
+        return network
 
 
 
