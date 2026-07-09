@@ -37,15 +37,15 @@ ACTION_NAMES = {
 
 # Edit these values, then run this file directly.
 POLICY = "model"  # "greedy", "greedy_astar", or "model"
-MODEL_PATH = "./models/DQN_v8.11.10_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
+MODEL_PATH = "./models2/DQN_v8.12.0_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
 VARIANT = 0
-ENV_VERSION = 11
+ENV_VERSION = 12
 NETWORK_VERSION = 8
 DATA_DIR = "./data"
-EPISODE_ID = "047"
+EPISODE_ID = "081"
 MAX_STEPS = None
 INTERVAL = 350
-SAVE_PATH = "./videos/vision3_test_047.mp4"
+SAVE_PATH = "./videos/8.12.0_test_081.mp4"
 VIDEO_FPS = 4
 VIDEO_DPI = 120
 FFMPEG_PATH = None  # e.g. "/opt/homebrew/bin/ffmpeg"; leave None to use system PATH
