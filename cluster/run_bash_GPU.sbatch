@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -N 1
-#SBATCH -p lrz-dgx-a100-80x8
+#SBATCH -p lrz-dgx-1-v100x8
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
 #SBATCH -o slurm_logs/slurm-%x-%j.out
