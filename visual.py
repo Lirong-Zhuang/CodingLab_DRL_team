@@ -37,22 +37,23 @@ ACTION_NAMES = {
 
 # Edit these values, then run this file directly.
 POLICY = "model"  # "greedy", "greedy_astar", or "model"
-MODEL_PATH = "./models/DQN_v8.11.10_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
+MODEL_PATH = "./models2/DQN_v8.12.0_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
 VARIANT = 0
-ENV_VERSION = 11
+ENV_VERSION = 12
 NETWORK_VERSION = 8
 DATA_DIR = "./data"
-EPISODE_ID = "047"
+EPISODE_ID = "081"
 MAX_STEPS = None
 INTERVAL = 350
-SAVE_PATH = "./videos/8.11.10_test_047.mp4"
+SAVE_PATH = "./videos/8.12.0_test_081.mp4"
 VIDEO_FPS = 4
 VIDEO_DPI = 120
 FFMPEG_PATH = None  # e.g. "/opt/homebrew/bin/ffmpeg"; leave None to use system PATH
 CPU = False
 SHOW = True
 REPEAT = True
-Q_LOG_STEPS = "169-174"  # e.g. "169-174" or "169,170,171"; empty string disables printing
+Q_LOG_STEPS = ""  # e.g. "169-174" or "169,170,171"; empty string disables printing
+ROBOT_IMAGE_PATH = os.path.join(os.path.dirname(__file__), "assets", "robot_agent_256.png")
 
 
 ENV_CLASSES = {
@@ -80,6 +81,16 @@ NETWORK_CLASSES = {
     10: rainbow_dqn.DQN_v10,
     11: rainbow_dqn.DQN_v11,
 }
+
+
+_ROBOT_IMAGE = None
+
+
+def robot_image():
+    global _ROBOT_IMAGE
+    if _ROBOT_IMAGE is None:
+        _ROBOT_IMAGE = plt.imread(ROBOT_IMAGE_PATH)
+    return _ROBOT_IMAGE
 
 
 class LegacyRainbowCNNQNetwork64(nn.Module):
@@ -607,12 +618,13 @@ def draw_grid(ax, frame):
     target_row, target_col = frame["target_loc"]
     ax.add_patch(
         Rectangle(
-            (target_col + 0.08, target_row + 0.08),
-            0.84,
-            0.84,
-            facecolor="#35b779",
-            edgecolor="#1f7a4d",
-            linewidth=1.8,
+            (target_col + 0.06, target_row + 0.06),
+            0.88,
+            0.88,
+            facecolor="#39d353",
+            edgecolor="none",
+            linewidth=0,
+            zorder=1,
         )
     )
 
@@ -622,10 +634,11 @@ def draw_grid(ax, frame):
         ax.add_patch(
             Circle(
                 (col + 0.5, row + 0.5),
-                0.28,
-                facecolor="#ffd84d",
-                edgecolor="#a57900",
-                linewidth=1.8,
+                0.19,
+                facecolor="#ff9f1c",
+                edgecolor="none",
+                linewidth=0,
+                zorder=2,
             )
         )
         ax.text(
@@ -637,28 +650,27 @@ def draw_grid(ax, frame):
             fontsize=10,
             fontweight="bold",
             color="#2f2f2f",
+            zorder=3,
         )
 
     agent_row, agent_col = frame["agent_loc"]
-    ax.add_patch(
-        Circle(
-            (agent_col + 0.5, agent_row + 0.5),
-            0.34,
-            facecolor="#2878ff",
-            edgecolor="#0b3b91",
-            linewidth=2.2,
+    ax.imshow(
+        robot_image(),
+        extent=(agent_col, agent_col + 1, agent_row + 1, agent_row),
+        interpolation="antialiased",
+        zorder=10,
+    )
+    if frame["agent_load"] > 0:
+        ax.add_patch(
+            Circle(
+                (agent_col + 0.5, agent_row + 0.5),
+                0.165,
+                facecolor="#ff9f1c",
+                edgecolor="none",
+                linewidth=0,
+                zorder=11,
+            )
         )
-    )
-    ax.text(
-        agent_col + 0.5,
-        agent_row + 0.5,
-        "A",
-        ha="center",
-        va="center",
-        fontsize=12,
-        fontweight="bold",
-        color="white",
-    )
 
 
 def draw_side_panel(ax, frame):
@@ -691,7 +703,6 @@ def draw_side_panel(ax, frame):
         color="#202020",
         linespacing=1.45,
     )
-    ax.text(5.35, 4.55, "Blue: agent   Green: target   Yellow: item", fontsize=9, color="#555555")
 
 
 def parse_args():
