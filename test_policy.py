@@ -10,9 +10,11 @@ from environment_v6 import Environment_v6
 from environment_v7 import Environment_v7
 from environment_v8 import Environment_v8
 from environment_v9 import Environment_v9
+from environment_v91 import Environment_v91
 from environment_v10 import Environment_v10
 from environment_v11 import Environment_v11
 from environment_v12 import Environment_v12
+from environment_v13 import Environment_v13
 import csv
 import os
 import torch
@@ -20,13 +22,13 @@ import dqn
 import rainbow_dqn
 
 
-MODEL_NAME = 'DQN_v8.12.1_variant_0'
+MODEL_NAME = 'DQN_v8.91.1_variant_0'
 MODEL_PATH = f'./models2/{MODEL_NAME}.pt'
 VARIANT = 0
 DATA_DIR = './data'
 NUM_TEST_EPISODES = 100
 RESULT_DIR = './test_result'
-RESULT_FILE_NAME = 'Test_Results_DQN_v8.12.1_variant_0.csv'
+RESULT_FILE_NAME = 'Test_Results_DQN_v8.91.1_variant_0.csv'
 
 
 def test_policy(env):
@@ -79,6 +81,6 @@ def save_test_results(env, episode_results, avg_test_rew):
 
 if __name__ == '__main__':
 
-    env = Environment_v12(variant=VARIANT, data_dir=DATA_DIR)  # initialize the environment
+    env = Environment_v91(variant=VARIANT, data_dir=DATA_DIR)  # initialize the environment
 
     test_policy(env)  # test the trained policy
