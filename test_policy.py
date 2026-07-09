@@ -20,13 +20,13 @@ import dqn
 import rainbow_dqn
 
 
-MODEL_NAME = 'DQN_v8.5.28_variant_0'
-MODEL_PATH = f'./models/{MODEL_NAME}.pt'
+MODEL_NAME = 'DQN_v8.12.1_variant_0'
+MODEL_PATH = f'./models2/{MODEL_NAME}.pt'
 VARIANT = 0
 DATA_DIR = './data'
 NUM_TEST_EPISODES = 100
 RESULT_DIR = './test_result'
-RESULT_FILE_NAME = 'Test_Results_DQN_v8.5.28_variant_0.csv'
+RESULT_FILE_NAME = 'Test_Results_DQN_v8.12.1_variant_0.csv'
 
 
 def test_policy(env):
@@ -79,6 +79,6 @@ def save_test_results(env, episode_results, avg_test_rew):
 
 if __name__ == '__main__':
 
-    env = Environment_v5(variant=VARIANT, data_dir=DATA_DIR)  # initialize the environment
+    env = Environment_v12(variant=VARIANT, data_dir=DATA_DIR)  # initialize the environment
 
     test_policy(env)  # test the trained policy
