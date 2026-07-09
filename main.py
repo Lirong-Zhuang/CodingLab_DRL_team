@@ -14,9 +14,9 @@ NETWORK_VERSION = 11
 ENV_VERSION = 9
 MODEL_VERSION = 10
 NUM_EPISODES = 10000
-ENCODER_PATH = './autoencoder/autoencoder_models/encoder_resnet18_env9_variant0_v2.pt'
+ENCODER_PATH = None
 FREEZE_ENCODER = False
-ENCODER_TYPE = "resnet18"
+ENCODER_TYPE = "cnn"
 GB_WINDOW = 0
 # GB output is disabled for this run. Keep the old windows here for quick restore.
 # GB_WINDOWS = [1000, 2000, 3000, 4000, 5000]
@@ -92,6 +92,7 @@ from environment_v91 import Environment_v91
 from environment_v10 import Environment_v10
 from environment_v11 import Environment_v11
 from environment_v12 import Environment_v12
+from environment_v13 import Environment_v13
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
@@ -115,6 +116,7 @@ def build_env(env_version, variant, data_dir):
         10: Environment_v10,
         11: Environment_v11,
         12: Environment_v12,
+        13: Environment_v13,
     }
     return env_classes[env_version](variant, data_dir)
 
