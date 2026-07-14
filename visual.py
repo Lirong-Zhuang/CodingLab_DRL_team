@@ -25,6 +25,8 @@ from environment_v10 import Environment_v10
 from environment_v11 import Environment_v11
 from environment_v12 import Environment_v12
 from environment_v13 import Environment_v13
+from environment_v14 import Environment_v14
+from environment_v15 import Environment_v15
 
 
 ACTION_NAMES = {
@@ -71,6 +73,8 @@ ENV_CLASSES = {
     11: Environment_v11,
     12: Environment_v12,
     13: Environment_v13,
+    14: Environment_v14,
+    15: Environment_v15,
 }
 
 
