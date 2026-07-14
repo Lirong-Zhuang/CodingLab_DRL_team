@@ -38,15 +38,15 @@ ACTION_NAMES = {
 
 # Edit these values, then run this file directly.
 POLICY = "model"  # "greedy", "greedy_astar", or "model"
-MODEL_PATH = "./models2/DQN_v8.11.26_variant_0.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
-VARIANT = 0
-ENV_VERSION = 11
+MODEL_PATH = "./models2/DQN_v8.5.31_variant_2.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
+VARIANT = 2
+ENV_VERSION = 5
 NETWORK_VERSION = 8
 DATA_DIR = "./data"
-EPISODE_ID = "024"
+EPISODE_ID = "096"
 MAX_STEPS = None
 INTERVAL = 350
-SAVE_PATH = "./videos/8.11.26_test_024.mp4"
+SAVE_PATH = "./videos/8.5.31_test_096.mp4"
 VIDEO_FPS = 4
 VIDEO_DPI = 120
 FFMPEG_PATH = None  # e.g. "/opt/homebrew/bin/ffmpeg"; leave None to use system PATH
@@ -605,14 +605,16 @@ def draw_grid(ax, frame):
 
     for row in range(rows):
         for col in range(cols):
-            facecolor = "#f7f7f7" if (row, col) in frame["eligible_cells"] else "#d9d9d9"
+            is_eligible = (row, col) in frame["eligible_cells"]
+            facecolor = "#f7f7f7" if is_eligible else "#000000"
+            edgecolor = "#555555" if is_eligible else "#000000"
             ax.add_patch(
                 Rectangle(
                     (col, row),
                     1,
                     1,
                     facecolor=facecolor,
-                    edgecolor="#555555",
+                    edgecolor=edgecolor,
                     linewidth=1.0,
                 )
             )
