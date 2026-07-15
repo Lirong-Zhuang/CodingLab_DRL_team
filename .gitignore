@@ -19,3 +19,4 @@ env/
 
 # Model outputs
 models/
+demonstrations/
