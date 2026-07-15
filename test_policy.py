@@ -1,30 +1,55 @@
 # compute average reward per test episode with trained policy
-
-
+import dqn
+import torch
+import numpy as np
+import pandas as pd
 from environment import Environment
 
 
-def test_policy(env):
-    test_rew = 0.  # initialize reward tracking
+
+def test_policy(env, network, model_path):
+    test_rew = []  # initialize reward tracking
+    network.q_network.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+    network.q_network.eval()
+    old_epsilon = network.epsilon  # save current epsilon value
+    network.epsilon = 0  # set epsilon to 0 for validation
 
     for i in range(100):  # loop over 100 test episodes
         obs = env.reset('testing')  # get initial obs
+        rew_per_eps = 0.
 
         for j in range(200):  # loop over 200 steps per episode
-            act = ...  # TODO: get action for the obs from your trained policy
+            act = network.select_action(obs)
             rew, next_obs, _ = env.step(act)  # take one step in the environment
-            test_rew += rew  # track rewards
+            rew_per_eps += rew  # track rewards
             obs = next_obs  # continue from the new obs
+        test_rew.append(rew_per_eps)
 
-    avg_test_rew = test_rew / 100  # compute the average reward per episode
+    network.epsilon = old_epsilon
+    avg_test_rew = np.mean(test_rew)  # compute the average reward per episode
+    df = pd.DataFrame({
+        'episode': range(1, 101),
+        'reward': test_rew
+    })
+    df.loc[len(df)] = ['mean', avg_test_rew]
 
+    csv_path = f'./test_results/test_results_variant_{env.variant}.csv'
+    df.to_csv(csv_path, index=False)
+    print(f'Results saved to {csv_path}')
     print(avg_test_rew)  # print the result
 
 
 if __name__ == '__main__':
+    variant = 1
+    model_path = './models/DQN_CNN_v2.2_variant_1.pt'
+    init_env = Environment(variant=variant, data_dir='./data')
+    network = dqn.DQN_CNN_v2(init_env)
+    test_env = Environment(variant=variant, data_dir='./test_episodes')  # initialize the environment
+    test_policy(test_env, network, model_path)  # test the trained policy
 
-    data_dir = ...  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
-    variant = ...  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
-    env = Environment(variant=variant, data_dir=data_dir)  # initialize the environment
 
-    test_policy(env)  # test the trained policy
+
+
+
+
+
