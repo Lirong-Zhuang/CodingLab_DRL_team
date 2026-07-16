@@ -563,7 +563,6 @@ def visualize_episode(
         ax.clear()
         draw_grid(ax, frame)
         draw_side_panel(ax, frame)
-        ax.set_title(f"Test episode {frame['episode_id']:03d}", pad=12)
 
     ani = animation.FuncAnimation(
         fig,

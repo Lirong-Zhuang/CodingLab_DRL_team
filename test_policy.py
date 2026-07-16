@@ -24,13 +24,14 @@ import dqn
 import rainbow_dqn
 
 
-MODEL_NAME = 'DQN_v8.13.2_variant_2'
+# MODEL_NAME = 'DQN_v8.13.2_variant_2'
+MODEL_NAME = 'Asch_v2.1_variant_2'
 MODEL_PATH = f'./models2/{MODEL_NAME}.pt'
 VARIANT = 2
 DATA_DIR = './data'
 NUM_TEST_EPISODES = 100
 RESULT_DIR = './test_result'
-RESULT_FILE_NAME = 'Test_Results_DQN_v8.13.2_variant_2.csv'
+RESULT_FILE_NAME = 'Test_Results_Asch_v2.1_variant_2.csv'
 
 
 def test_policy(env):
