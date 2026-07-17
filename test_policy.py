@@ -17,11 +17,13 @@ from environment_v12 import Environment_v12
 from environment_v13 import Environment_v13
 from environment_v16 import Environment_v16
 from environment_v17 import Environment_v17
+from environment_vaschley import Environment_vaschley
 import csv
 import os
 import torch
 import dqn
 import rainbow_dqn
+from aschley_dqn import AschleyCNNv2
 
 
 # MODEL_NAME = 'DQN_v8.13.2_variant_2'
@@ -39,7 +41,7 @@ def test_policy(env):
     episode_results = []
 
     # network
-    network = rainbow_dqn.DQN_v8(env)
+    network = AschleyCNNv2(env)
     network.q_network.load_state_dict(torch.load(MODEL_PATH, map_location=network.device))
     network.q_network.eval()
     network.epsilon = 0
@@ -84,6 +86,6 @@ def save_test_results(env, episode_results, avg_test_rew):
 
 if __name__ == '__main__':
 
-    env = Environment_v13(variant=VARIANT, data_dir=DATA_DIR)  # initialize the environment
+    env = Environment_vaschley(variant=VARIANT, data_dir=DATA_DIR)
 
     test_policy(env)  # test the trained policy
