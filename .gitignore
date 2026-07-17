@@ -21,6 +21,7 @@ videos/
 # Model outputs
 models/
 models2/
+models3/
 autoencoder/autoencoder_models/
 
 # Keep only TensorBoard event files from autoencoder logs
