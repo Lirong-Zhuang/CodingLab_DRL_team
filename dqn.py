@@ -1,6 +1,8 @@
 import random
 import numpy as np
-import tensorflow as tf
+# TensorFlow is only required by the legacy DQN_v0 demo. Keep it disabled so
+# importing this module does not load TensorFlow alongside PyTorch.
+# import tensorflow as tf
 import torch
 import torch.nn as nn
 import torch.optim as optim

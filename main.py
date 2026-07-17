@@ -74,8 +74,10 @@ random.seed(seed)
 import numpy as np
 np.random.seed(seed)
 
-import tensorflow as tf
-tf.random.set_seed(seed)
+# TensorFlow is not used by the PyTorch training pipeline. Importing it can
+# conflict with the CUDA libraries loaded by PyTorch on the cluster.
+# import tensorflow as tf
+# tf.random.set_seed(seed)
 
 import torch
 torch.manual_seed(seed)
