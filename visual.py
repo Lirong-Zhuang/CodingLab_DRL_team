@@ -30,6 +30,8 @@ from environment_v15 import Environment_v15
 from environment_v16 import Environment_v16
 from environment_v17 import Environment_v17
 from environment_v18 import Environment_v18
+from environment_vaschley import Environment_vaschley
+from aschley_dqn import AschleyCNNv2
 
 
 ACTION_NAMES = {
@@ -43,15 +45,15 @@ ACTION_NAMES = {
 
 # Edit these values, then run this file directly.
 POLICY = "model"  # "greedy", "greedy_astar", or "model"
-MODEL_PATH = "./models2/DQN_v8.5.31_variant_2.pt"  # e.g. "./models/DQN_v8.5.4_variant_2.pt"; only needed for POLICY = "model"
+MODEL_PATH = "./models2/Asch_v2.1_variant_2.pt"
 VARIANT = 2
-ENV_VERSION = 5
-NETWORK_VERSION = 8
+ENV_VERSION = 19
+NETWORK_VERSION = 21
 DATA_DIR = "./data"
 EPISODE_ID = "096"
 MAX_STEPS = None
 INTERVAL = 350
-SAVE_PATH = "./videos/8.5.31_test_096.mp4"
+SAVE_PATH = "./videos/Asch_v2.1_variant_2_test_096.gif"
 VIDEO_FPS = 4
 VIDEO_DPI = 120
 FFMPEG_PATH = None  # e.g. "/opt/homebrew/bin/ffmpeg"; leave None to use system PATH
@@ -81,6 +83,7 @@ ENV_CLASSES = {
     16: Environment_v16,
     17: Environment_v17,
     18: Environment_v18,
+    19: Environment_vaschley,
 }
 
 
@@ -92,6 +95,7 @@ NETWORK_CLASSES = {
     9: rainbow_dqn.DQN_v9,
     10: rainbow_dqn.DQN_v10,
     11: rainbow_dqn.DQN_v11,
+    21: AschleyCNNv2,
 }
 
 
@@ -385,12 +389,15 @@ def load_network(env, network_version, model_path, cpu=False):
     network = NETWORK_CLASSES[network_version](env)
     if cpu:
         network.device = torch.device("cpu")
-        network.support = network.support.to(network.device)
+        if hasattr(network, "support"):
+            network.support = network.support.to(network.device)
         network.q_network.to(network.device)
-        network.target_network.to(network.device)
+        if hasattr(network, "target_network"):
+            network.target_network.to(network.device)
     map_location = network.device
     state_dict = torch.load(model_path, map_location=map_location)
-    adapt_legacy_network_if_needed(network, network_version, state_dict, network.device)
+    if network_version != 21:
+        adapt_legacy_network_if_needed(network, network_version, state_dict, network.device)
     network.q_network.load_state_dict(state_dict)
     network.q_network.eval()
     network.epsilon = 0
