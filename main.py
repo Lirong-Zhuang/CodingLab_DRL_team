@@ -8,7 +8,7 @@ import rainbow_dqn_ablation
 
 
 # Edit these values before running this file directly.
-VARIANT = 0
+VARIANT = 2
 SEED = 777
 DATA_DIR = './data'
 NETWORK_VERSION = 11
