@@ -8,12 +8,12 @@ import rainbow_dqn_ablation
 
 
 # Edit these values before running this file directly.
-VARIANT = 0
+VARIANT = 2
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = "a5"
-ENV_VERSION = 5
-MODEL_VERSION = 1
+NETWORK_VERSION = 8
+ENV_VERSION = 11
+MODEL_VERSION = 27
 NUM_EPISODES = 10000
 ENCODER_PATH = None
 FREEZE_ENCODER = False
