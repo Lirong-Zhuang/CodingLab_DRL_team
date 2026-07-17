@@ -4,14 +4,15 @@ from torch.utils.tensorboard import SummaryWriter
 import dqn
 import ppo
 import rainbow_dqn
+import rainbow_dqn_ablation
 
 
 # Edit these values before running this file directly.
-VARIANT = 2
+VARIANT = 0
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = 8
-ENV_VERSION = 15
+NETWORK_VERSION = "a5"
+ENV_VERSION = 5
 MODEL_VERSION = 1
 NUM_EPISODES = 10000
 ENCODER_PATH = None
@@ -42,7 +43,12 @@ def parse_args():
     parser.add_argument("--variant", type=int, default=VARIANT, choices=[0, 1, 2])
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--data_dir", type=str, default=DATA_DIR)
-    parser.add_argument("--network_version", type=int, default=NETWORK_VERSION)
+    parser.add_argument(
+        "--network_version",
+        type=str,
+        default=NETWORK_VERSION,
+        choices=["5", "6", "7", "8", "9", "10", "11", "a0", "a1", "a2", "a3", "a4", "a5"],
+    )
     parser.add_argument("--env_version", type=int, default=ENV_VERSION)
     parser.add_argument("--model_version", type=int, default=MODEL_VERSION)
     parser.add_argument("--num_episodes", type=int, default=NUM_EPISODES)
@@ -100,9 +106,10 @@ from environment_v17 import Environment_v17
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
-model_dir = './models2'
+model_dir = './models3'
+log_root_dir = './logs3'
 os.makedirs(model_dir, exist_ok=True)
-os.makedirs('./logs2', exist_ok=True)
+os.makedirs(log_root_dir, exist_ok=True)
 
 
 def build_env(env_version, variant, data_dir):
@@ -130,16 +137,23 @@ def build_env(env_version, variant, data_dir):
 
 
 def build_dqn_network(network_version, env):
+    network_version = str(network_version).lower()
     network_classes = {
-        5: dqn.DQN_v5,
-        6: rainbow_dqn.DQN_v6,
-        7: rainbow_dqn.DQN_v7,
-        8: rainbow_dqn.DQN_v8,
-        9: rainbow_dqn.DQN_v9,
-        10: rainbow_dqn.DQN_v10,
-        11: rainbow_dqn.DQN_v11,
+        "5": dqn.DQN_v5,
+        "6": rainbow_dqn.DQN_v6,
+        "7": rainbow_dqn.DQN_v7,
+        "8": rainbow_dqn.DQN_v8,
+        "9": rainbow_dqn.DQN_v9,
+        "10": rainbow_dqn.DQN_v10,
+        "11": rainbow_dqn.DQN_v11,
+        "a0": rainbow_dqn_ablation.DQN_a0,
+        "a1": rainbow_dqn_ablation.DQN_a1,
+        "a2": rainbow_dqn_ablation.DQN_a2,
+        "a3": rainbow_dqn_ablation.DQN_a3,
+        "a4": rainbow_dqn_ablation.DQN_a4,
+        "a5": rainbow_dqn_ablation.DQN_a5,
     }
-    if network_version == 11:
+    if network_version == "11":
         encoder_path = args.encoder_path
         if isinstance(encoder_path, str) and encoder_path.lower() in {"", "none", "null"}:
             encoder_path = None
@@ -245,7 +259,7 @@ def train_dqn(env):
 
     # file protection
     run_name = f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}'
-    log_dir = f'./logs2/{run_name}'
+    log_dir = os.path.join(log_root_dir, run_name)
     existing_gb_model_paths = [
         path
         for path in gb_model_paths.values()
@@ -415,7 +429,7 @@ def train_ppo(env):
 
     # file protection
     run_name = f'{network.file_name}{model_version}_variant_{env.variant}'
-    log_dir = f'./logs/{run_name}'
+    log_dir = os.path.join(log_root_dir, run_name)
     if os.path.exists(model_path) or os.path.exists(gb_model_path) or os.path.exists(log_dir):
         raise FileExistsError(
             f'Model name already exists: {run_name}. '
