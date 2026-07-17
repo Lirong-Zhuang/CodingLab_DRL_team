@@ -103,6 +103,7 @@ from environment_v14 import Environment_v14
 from environment_v15 import Environment_v15
 from environment_v16 import Environment_v16
 from environment_v17 import Environment_v17
+from environment_v18 import Environment_v18
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
@@ -132,6 +133,7 @@ def build_env(env_version, variant, data_dir):
         15: Environment_v15,
         16: Environment_v16,
         17: Environment_v17,
+        18: Environment_v18,
     }
     return env_classes[env_version](variant, data_dir)
 
