@@ -11,13 +11,13 @@ import rainbow_dqn_ablation
 VARIANT = 2
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = 8
+NETWORK_VERSION = 11
 ENV_VERSION = 11
-MODEL_VERSION = 27
+MODEL_VERSION = 12
 NUM_EPISODES = 10000
-ENCODER_PATH = None
+ENCODER_PATH = './autoencoder/autoencoder_models/encoder_alexnet8_env11_variant0_v1.pt'
 FREEZE_ENCODER = False
-ENCODER_TYPE = "cnn"
+ENCODER_TYPE = "alexnet8"  # Options: "cnn", "lenet5", "alexnet8", "resnet18"
 GB_WINDOW = 0
 # GB output is disabled for this run. Keep the old windows here for quick restore.
 # GB_WINDOWS = [1000, 2000, 3000, 4000, 5000]
@@ -74,8 +74,10 @@ random.seed(seed)
 import numpy as np
 np.random.seed(seed)
 
-import tensorflow as tf
-tf.random.set_seed(seed)
+# TensorFlow is not used by the PyTorch training pipeline. Importing it can
+# conflict with the CUDA libraries loaded by PyTorch on the cluster.
+# import tensorflow as tf
+# tf.random.set_seed(seed)
 
 import torch
 torch.manual_seed(seed)

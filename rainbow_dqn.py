@@ -1,6 +1,7 @@
 import random
 import numpy as np
-import tensorflow as tf
+# TensorFlow is not used in this PyTorch Rainbow DQN implementation.
+# import tensorflow as tf
 import torch
 import torch.nn as nn
 import torch.optim as optim
