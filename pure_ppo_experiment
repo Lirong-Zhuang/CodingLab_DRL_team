@@ -1,0 +1,616 @@
+import argparse
+import csv
+import os
+import random
+import sys
+import json
+import math
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import torch
+
+
+def add_project_to_path(project_dir):
+    # Allow this script to import environment.py and ppo.py from the PyCharm project.
+    project_dir = str(Path(project_dir).expanduser().resolve())
+    if project_dir not in sys.path:
+        sys.path.insert(0, project_dir)
+
+
+class PurePPOTrainer:
+    # This trainer runs PPO without behavioural cloning.
+    # Greedy actions are never used here; the policy learns from rewards only.
+    def __init__(self, env, agent, log_path, model_path):
+        self.env = env
+        self.agent = agent
+        self.log_path = Path(log_path)
+        self.model_path = Path(model_path)
+
+        self.rollout_episodes = 16      # number of episodes collected before one PPO update
+        self.validation_every = 25      # how often we test on validation episodes
+        self.validation_episodes = 40   # number of validation episodes used for checkpoint selection
+        self.best_validation = -float("inf")
+        self.use_dense_training_reward = True  # add extra learning signal during training
+        self.use_curriculum = True             # optional easier synthetic episodes at the start
+        self.curriculum_frac = 0.75            # fraction of training that can use curriculum
+        self.current_update_frac = 1.0
+        self.block_useless_wait = True         # optional mask that removes useless waiting
+        self.shortest_distances = self.build_shortest_distances()
+
+        # PPO hyperparameters. Pure PPO needs more exploration than the BC warm-start model.
+        self.agent.bc_episodes = 0
+        self.agent.num_episodes = 6000
+        self.agent.learning_rate = 3e-4
+        self.agent.clip_epsilon = 0.2
+        self.agent.update_epochs = 6
+        self.agent.gae_lambda = 0.95
+        self.agent.gamma = 0.99
+        self.agent.entropy_coef_start = 0.15
+        self.agent.entropy_coef_end = 0.01
+        self.agent.entropy_coef = self.agent.entropy_coef_start
+        self.agent.value_coef = 0.5
+        self.agent.optimizer = torch.optim.Adam(
+            self.agent.network.parameters(),
+            lr=self.agent.learning_rate,
+        )
+
+    def train(self):
+        # Create output folders and open the CSV log.
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.model_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with self.log_path.open("w", newline="") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "update",
+                    "train_reward",
+                    "validation_reward",
+                    "entropy_coef",
+                    "loss",
+                    "actor_loss",
+                    "critic_loss",
+                    "policy_entropy",
+                ],
+            )
+            writer.writeheader()
+
+            total_updates = max(1, math.ceil(self.agent.num_episodes / self.rollout_episodes))
+            episodes_collected = 0
+            for update in range(total_updates):
+                # Track training progress and slowly reduce the entropy bonus.
+                self.current_update_frac = update / max(1, total_updates - 1)
+                self.agent.decay_entropy(update * self.rollout_episodes)
+
+                # Step 1: collect trajectories with the current policy.
+                episode_count = min(
+                    self.rollout_episodes,
+                    self.agent.num_episodes - episodes_collected,
+                )
+                batch = self.collect_rollout(episode_count)
+                episodes_collected += episode_count
+
+                # Step 2: compute returns and advantages for PPO.
+                returns, advantages = self.agent.compute_returns(
+                    rewards=batch["rewards"],
+                    dones=batch["dones"],
+                    values=batch["values"],
+                )
+
+                # Step 3: update actor and critic with PPO's clipped objective.
+                loss, actor_loss, critic_loss, policy_entropy = self.agent.update(
+                    obs=batch["obs"],
+                    actions=batch["actions"],
+                    log_probs=batch["log_probs"],
+                    returns=returns,
+                    advantages=advantages,
+                )
+
+                validation_reward = ""
+                if (update + 1) % self.validation_every == 0:
+                    # Step 4: evaluate on real validation episodes and save the best checkpoint.
+                    validation_reward = self.evaluate()
+                    if validation_reward > self.best_validation:
+                        self.best_validation = validation_reward
+                        self.agent.save(self.model_path)
+
+                row = {
+                    "update": update + 1,
+                    "train_reward": np.mean(batch["episode_rewards"]),
+                    "validation_reward": validation_reward,
+                    "entropy_coef": self.agent.entropy_coef,
+                    "loss": loss,
+                    "actor_loss": actor_loss,
+                    "critic_loss": critic_loss,
+                    "policy_entropy": policy_entropy,
+                }
+                writer.writerow(row)
+                f.flush()
+
+                if (update + 1) % 5 == 0:
+                    val_text = (
+                        f"{validation_reward:.2f}"
+                        if validation_reward != ""
+                        else "-"
+                    )
+                    print(
+                        f"update {update + 1:04d}/{total_updates}  "
+                        f"train {row['train_reward']:.2f}  "
+                        f"val {val_text}  "
+                        f"best {self.best_validation:.2f}  "
+                        f"entropy_coef {self.agent.entropy_coef:.4f}  "
+                        f"loss {loss:.3f}"
+                    )
+
+        print(f"Best validation: {self.best_validation:.2f}")
+        print(f"Saved best model: {self.model_path}")
+        print(f"Saved log: {self.log_path}")
+
+    def collect_rollout(self, episode_count=None):
+        # PPO is on-policy: it first collects fresh data using the current policy.
+        obs, actions, log_probs, rewards, dones, values = [], [], [], [], [], []
+        episode_rewards = []
+
+        if episode_count is None:
+            episode_count = self.rollout_episodes
+        for _ in range(episode_count):
+            current_obs = self.reset_training_episode()
+            episode_reward = 0.0
+
+            for _ in range(self.env.episode_steps):
+                # Sample an action during training so the agent still explores.
+                action, log_prob, value = self.agent.select_action(
+                    current_obs,
+                    deterministic=False,
+                )
+
+                # Store state before/after the environment step so shaped reward can compare them.
+                before = self.snapshot_state()
+                env_reward, next_obs, done = self.env.step(action)
+                after = self.snapshot_state()
+                reward = self.training_reward(env_reward, action, before, after)
+
+                # Save everything PPO needs for the later update.
+                obs.append(current_obs)
+                actions.append(action)
+                log_probs.append(log_prob)
+                rewards.append(reward)
+                dones.append(done)
+                values.append(value)
+                episode_reward += reward
+
+                current_obs = next_obs
+                if done:
+                    break
+
+            episode_rewards.append(episode_reward)
+
+        return {
+            "obs": obs,
+            "actions": actions,
+            "log_probs": log_probs,
+            "rewards": rewards,
+            "dones": dones,
+            "values": values,
+            "episode_rewards": episode_rewards,
+        }
+
+    def reset_training_episode(self):
+        # Normally PPO trains on the real training data.
+        obs = self.env.reset("training")
+
+        # If curriculum is enabled, replace early episodes with easier synthetic item patterns.
+        if self.use_curriculum and self.current_update_frac < self.curriculum_frac:
+            self.install_curriculum_episode()
+            obs = self.env.get_obs()
+        return obs
+
+    def install_curriculum_episode(self):
+        # Curriculum makes early learning easier by spawning nearby items first.
+        progress = self.current_update_frac / max(self.curriculum_frac, 1e-8)
+        target = self.env.target_loc
+        eligible = list(self.env.eligible_cells)
+
+        if progress < 0.35:
+            # Very easy: items are close to the target and appear less often.
+            max_distance = 2
+            interval = 16
+        elif progress < 0.70:
+            # Medium difficulty.
+            max_distance = 4
+            interval = 12
+        else:
+            # Closer to the real task.
+            max_distance = 8
+            interval = 10
+
+        candidate_cells = [
+            cell for cell in eligible
+            if cell != target and self.manhattan(cell, target) <= max_distance
+        ]
+        if not candidate_cells:
+            candidate_cells = [cell for cell in eligible if cell != target]
+
+        rows = []
+        for step in range(1, self.env.episode_steps, interval):
+            loc = random.choice(candidate_cells)
+            rows.append({
+                "step": step,
+                "vertical_idx": loc[0],
+                "horizontal_idx": loc[1],
+            })
+
+        self.env.data = pd.DataFrame(rows)
+        self.env._events = {
+            int(step): list(zip(group.vertical_idx, group.horizontal_idx))
+            for step, group in self.env.data.groupby("step")
+        }
+
+    def snapshot_state(self):
+        # Minimal copy of environment state used only for reward shaping.
+        return {
+            "loc": self.env.agent_loc,
+            "load": self.env.agent_load,
+            "items": list(self.env.item_locs),
+            "times": list(self.env.item_times),
+        }
+
+    def manhattan(self, loc_a, loc_b):
+        # For variant 2, blocked cells make Manhattan distance misleading.
+        # If shortest-path distance is available, use it instead.
+        if (loc_a, loc_b) in self.shortest_distances:
+            return self.shortest_distances[(loc_a, loc_b)]
+        return abs(loc_a[0] - loc_b[0]) + abs(loc_a[1] - loc_b[1])
+
+    def build_shortest_distances(self):
+        # Precompute shortest valid grid distances between all reachable cells.
+        cells = list(self.env.eligible_cells)
+        distances = {}
+        for start in cells:
+            queue = [(start, 0)]
+            seen = {start}
+            for loc, d in queue:
+                distances[(start, loc)] = d
+                r, c = loc
+                for nxt in [(r - 1, c), (r, c + 1), (r + 1, c), (r, c - 1)]:
+                    if nxt in self.env.eligible_cells and nxt not in seen:
+                        seen.add(nxt)
+                        queue.append((nxt, d + 1))
+        return distances
+
+    def nearest_item_distance(self, state):
+        # Distance from the agent to the closest currently visible item.
+        if not state["items"]:
+            return None
+        return min(self.manhattan(state["loc"], item) for item in state["items"])
+
+    def training_reward(self, env_reward, action, before, after):
+        # Dense reward is used only for training to help PPO learn faster.
+        # Validation and test still use the real environment reward.
+        if not self.use_dense_training_reward:
+            return env_reward
+
+        shaped = float(env_reward)
+        target = self.env.target_loc
+
+        # Detect important task events.
+        picked_up = after["load"] > before["load"]
+        dropped_off = after["load"] < before["load"]
+        invalid_move = action != 0 and before["loc"] == after["loc"]
+
+        # Extra positive signal for the two behaviours that actually solve the task.
+        if picked_up:
+            shaped += 10.0
+        if dropped_off:
+            shaped += 14.0
+
+        # Discourage moves into walls or outside the grid.
+        if invalid_move:
+            shaped -= 2.0
+
+        # Variant 1 has capacity 3, so while capacity remains we prefer collecting more items.
+        should_collect_more = (
+            self.env.variant == 1
+            and before["load"] < self.env.agent_capacity
+            and len(before["items"]) > 0
+        )
+
+        if before["load"] > 0 and not should_collect_more:
+            # If carrying and done collecting, reward moving closer to the target.
+            old_dist = self.manhattan(before["loc"], target)
+            new_dist = self.manhattan(after["loc"], target)
+            if new_dist < old_dist:
+                shaped += 2.5
+            elif new_dist > old_dist:
+                shaped -= 1.2
+            if action == 0 and before["loc"] != target:
+                shaped -= 1.5
+        elif before["items"]:
+            # If not carrying, or variant 1 can still collect more, reward moving to items.
+            old_dist = self.nearest_item_distance(before)
+            new_dist = self.nearest_item_distance(after)
+            if old_dist is not None and new_dist is not None:
+                if new_dist < old_dist:
+                    shaped += 2.5
+                elif new_dist > old_dist:
+                    shaped -= 1.2
+            if action == 0:
+                shaped -= 1.5
+
+        return shaped
+
+    def evaluate(self):
+        # Evaluation uses deterministic actions and the real reward, not the shaped training reward.
+        rewards = []
+        was_training = self.agent.network.training
+        self.agent.network.eval()
+
+        for _ in range(self.validation_episodes):
+            obs = self.env.reset("validation")
+            episode_reward = 0.0
+            done = 0
+            while not done:
+                action, _, _ = self.agent.select_action(obs, deterministic=True)
+                reward, obs, done = self.env.step(action)
+                episode_reward += reward
+            rewards.append(episode_reward)
+
+        if was_training:
+            self.agent.network.train()
+        return float(np.mean(rewards))
+
+
+def main():
+    # Command-line settings let us train any variant and turn masks/curriculum on or off.
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--project_dir",
+        type=str,
+        default="/Users/lejlamehmedovic/Downloads/CodingLab_DRL_team-dev_lejla",
+    )
+    parser.add_argument("--variant", type=int, default=0, choices=[0, 1, 2])
+    parser.add_argument("--episodes", type=int, default=6000)
+    parser.add_argument("--rollout_episodes", type=int, default=16)
+    parser.add_argument("--validation_every", type=int, default=25)
+    parser.add_argument("--validation_episodes", type=int, default=40)
+    parser.add_argument("--dense_reward", action="store_true", default=True)
+    parser.add_argument("--no_dense_reward", action="store_false", dest="dense_reward")
+    parser.add_argument("--curriculum", action="store_true", default=True)
+    parser.add_argument("--no_curriculum", action="store_false", dest="curriculum")
+    parser.add_argument("--allow_useless_wait", action="store_true", default=False)
+    parser.add_argument("--directed_mask", action="store_true", default=False)
+    parser.add_argument("--seed", type=int, default=123)
+    parser.add_argument("--architecture", choices=["mlp", "cnn", "hybrid"], default="hybrid")
+    args = parser.parse_args()
+
+    add_project_to_path(args.project_dir)
+    from environment import Environment
+    from ppo import PPO_v1
+
+    # Fix random seeds so results are easier to reproduce.
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+
+    # Build the environment and PPO agent from the original project code.
+    project_dir = Path(args.project_dir).expanduser().resolve()
+    env = Environment(variant=args.variant, data_dir=str(project_dir / "data"))
+    env.reward_shaping = True
+    env.feature_mode = "all"
+
+    agent = PPO_v1(env, architecture=args.architecture)
+
+    # Optional action masks:
+    # - directed_mask: strongest mask, keeps only sensible directions
+    # - wait mask: only removes useless waiting
+    # - allow_useless_wait: no extra mask beyond the base impossible-move mask in PPO_v1
+    if args.directed_mask:
+        patch_directed_action_mask(agent)
+    elif not args.allow_useless_wait:
+        patch_wait_mask(agent)
+
+    # Trainer controls rollout collection, PPO updates, validation, logging, and saving.
+    trainer = PurePPOTrainer(
+        env=env,
+        agent=agent,
+        log_path=Path("outputs") / f"ppo_{args.architecture}_variant_{args.variant}_5000_log.csv",
+        model_path=Path("outputs") / f"ppo_{args.architecture}_variant_{args.variant}_5000.pt",
+    )
+    trainer.agent.num_episodes = args.episodes
+    trainer.rollout_episodes = args.rollout_episodes
+    trainer.validation_every = args.validation_every
+    trainer.validation_episodes = args.validation_episodes
+    trainer.use_dense_training_reward = args.dense_reward
+    trainer.use_curriculum = args.curriculum
+
+    # Small variant-specific hyperparameter changes.
+    if args.variant == 1:
+        trainer.agent.entropy_coef_start = 0.12
+        trainer.agent.entropy_coef_end = 0.006
+        trainer.agent.learning_rate = 2.5e-4
+    elif args.variant == 2:
+        trainer.agent.entropy_coef_start = 0.18
+        trainer.agent.entropy_coef_end = 0.012
+        trainer.agent.learning_rate = 2.5e-4
+
+    trainer.agent.entropy_coef = trainer.agent.entropy_coef_start
+    trainer.agent.optimizer = torch.optim.Adam(
+        trainer.agent.network.parameters(),
+        lr=trainer.agent.learning_rate,
+    )
+    trainer.train()
+
+    # Evaluate the selected best checkpoint on all 100 held-out validation and test episodes.
+    agent.load(trainer.model_path)
+    validation_reward = evaluate_split(env, agent, "validation", 100)
+    test_reward = evaluate_split(env, agent, "testing", len(env.test_episodes))
+    result = {
+        "architecture": args.architecture,
+        "variant": args.variant,
+        "seed": args.seed,
+        "training_episodes": args.episodes,
+        "best_checkpoint_validation_mean_40": trainer.best_validation,
+        "validation_mean_100": validation_reward,
+        "test_mean": test_reward,
+        "test_episodes": 100,
+        "checkpoint": str(trainer.model_path),
+        "log": str(trainer.log_path),
+    }
+    result_path = Path("outputs") / f"ppo_{args.architecture}_variant_{args.variant}_5000_result.json"
+    result_path.write_text(json.dumps(result, indent=2) + "\n")
+    print(json.dumps(result, indent=2))
+
+
+def evaluate_split(env, agent, mode, count):
+    rewards = []
+    agent.network.eval()
+    for _ in range(count):
+        if mode == "testing":
+            # Test CSVs are supplied separately from the training data directory.
+            obs = env.reset("validation")
+            episode_path = Path(__file__).resolve().parent / "test_episodes" / f"variant_{env.variant}" / f"episode_{len(rewards):03d}.csv"
+            env.data = pd.read_csv(episode_path, index_col=0)
+            env._events = {
+                int(step): list(zip(group.vertical_idx, group.horizontal_idx))
+                for step, group in env.data.groupby("step")
+            }
+        else:
+            obs = env.reset(mode)
+        done = 0
+        total = 0.0
+        while not done:
+            action, _, _ = agent.select_action(obs, deterministic=True)
+            reward, obs, done = env.step(action)
+            total += reward
+        rewards.append(total)
+    return float(np.mean(rewards))
+
+
+def patch_wait_mask(agent):
+    # This mask only prevents waiting when the agent clearly has something useful to do.
+    original_action_mask = agent.action_mask_from_obs
+
+    def action_mask_without_useless_wait(obs_t):
+        # Start from the original PPO_v1 mask, which already removes impossible moves.
+        mask = original_action_mask(obs_t)
+        row = torch.round(obs_t[:, 1] * (agent.env.vertical_cell_count - 1)).long()
+        col = torch.round(obs_t[:, 2] * (agent.env.horizontal_cell_count - 1)).long()
+        load = obs_t[:, 3]
+        presence = obs_t[:, 4:29]
+
+        for i, (r, c) in enumerate(zip(row.tolist(), col.tolist())):
+            # Waiting is useful if the agent is on an item or at the target while carrying.
+            grid_idx = r * agent.env.horizontal_cell_count + c
+            on_item = bool(presence[i, grid_idx].item() > 0.5)
+            has_visible_item = bool((presence[i] > 0.5).any().item())
+            carrying = bool(load[i].item() > 0.0)
+            at_target = (r, c) == agent.env.target_loc
+            should_act = (carrying and not at_target) or (has_visible_item and not on_item)
+            if should_act:
+                if mask[i, 1:].any():
+                    mask[i, 0] = False
+        return mask
+
+    agent.action_mask_from_obs = action_mask_without_useless_wait
+
+
+def patch_directed_action_mask(agent):
+    # This stronger mask keeps only directions that move toward the current useful goal.
+    # It is not behavioural cloning: no greedy labels are used.
+    original_action_mask = agent.action_mask_from_obs
+    action_delta = {
+        1: (-1, 0),
+        2: (0, 1),
+        3: (1, 0),
+        4: (0, -1),
+    }
+
+    distances = {}
+    # Shortest-path distances are needed for variant 2 because some cells are blocked.
+    cells = list(agent.env.eligible_cells)
+    for start in cells:
+        queue = [(start, 0)]
+        seen = {start}
+        for loc, d in queue:
+            distances[(start, loc)] = d
+            r, c = loc
+            for nxt in [(r - 1, c), (r, c + 1), (r + 1, c), (r, c - 1)]:
+                if nxt in agent.env.eligible_cells and nxt not in seen:
+                    seen.add(nxt)
+                    queue.append((nxt, d + 1))
+
+    def dist(a, b):
+        if (a, b) in distances:
+            return distances[(a, b)]
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+    def directed_mask(obs_t):
+        # Start from impossible-move masking, then narrow actions further.
+        base_mask = original_action_mask(obs_t)
+        guided = torch.zeros_like(base_mask)
+
+        row = torch.round(obs_t[:, 1] * (agent.env.vertical_cell_count - 1)).long()
+        col = torch.round(obs_t[:, 2] * (agent.env.horizontal_cell_count - 1)).long()
+        load = obs_t[:, 3]
+        presence = obs_t[:, 4:29]
+
+        for i, (r, c) in enumerate(zip(row.tolist(), col.tolist())):
+            loc = (r, c)
+
+            # Convert normalized load back to an item count.
+            load_count = int(round(load[i].item() * agent.env.agent_capacity))
+            carrying = load_count > 0
+            item_indices = torch.nonzero(presence[i] > 0.5, as_tuple=False).flatten().tolist()
+            item_locs = [
+                (idx // agent.env.horizontal_cell_count, idx % agent.env.horizontal_cell_count)
+                for idx in item_indices
+            ]
+
+            should_return = carrying and (
+                # Variants 0 and 2 have capacity 1, so carrying means return.
+                # Variant 1 returns only when capacity is full or no visible items remain.
+                agent.env.variant != 1
+                or load_count >= agent.env.agent_capacity
+                or not item_locs
+            )
+
+            if should_return:
+                # Keep actions that reduce distance to the target.
+                target = agent.env.target_loc
+                if loc == target:
+                    guided[i, 0] = base_mask[i, 0]
+                else:
+                    current_dist = dist(loc, target)
+                    for action, delta in action_delta.items():
+                        nxt = (r + delta[0], c + delta[1])
+                        if base_mask[i, action] and dist(nxt, target) < current_dist:
+                            guided[i, action] = True
+            elif item_locs:
+                if loc in item_locs:
+                    # Waiting on an item lets the environment pick it up.
+                    guided[i, 0] = base_mask[i, 0]
+                else:
+                    # Keep actions that reduce distance to the nearest visible item.
+                    target = min(item_locs, key=lambda item: dist(loc, item))
+                    current_dist = dist(loc, target)
+                    for action, delta in action_delta.items():
+                        nxt = (r + delta[0], c + delta[1])
+                        if base_mask[i, action] and dist(nxt, target) < current_dist:
+                            guided[i, action] = True
+            else:
+                # If there are no visible items and nothing to deliver, waiting is sensible.
+                guided[i, 0] = base_mask[i, 0]
+
+            if not guided[i].any():
+                # Safety fallback: never return an empty mask.
+                guided[i] = base_mask[i]
+
+        return guided
+
+    agent.action_mask_from_obs = directed_mask
+
+
+if __name__ == "__main__":
+    main()
