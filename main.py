@@ -47,7 +47,7 @@ def parse_args():
         "--network_version",
         type=str,
         default=NETWORK_VERSION,
-        choices=["5", "6", "7", "8", "9", "10", "11", "a0", "a1", "a2", "a3", "a4", "a5"],
+        choices=["5", "6", "7", "8", "9", "10", "11", "hybrid", "a0", "a1", "a2", "a3", "a4", "a5"],
     )
     parser.add_argument("--env_version", type=int, default=ENV_VERSION)
     parser.add_argument("--model_version", type=int, default=MODEL_VERSION)
@@ -150,6 +150,7 @@ def build_dqn_network(network_version, env):
         "9": rainbow_dqn.DQN_v9,
         "10": rainbow_dqn.DQN_v10,
         "11": rainbow_dqn.DQN_v11,
+        "hybrid": dqn.DQN_hybrid,
         "a0": rainbow_dqn_ablation.DQN_a0,
         "a1": rainbow_dqn_ablation.DQN_a1,
         "a2": rainbow_dqn_ablation.DQN_a2,
