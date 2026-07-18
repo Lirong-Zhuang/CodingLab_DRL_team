@@ -8,16 +8,17 @@ import rainbow_dqn_ablation
 
 
 # Edit these values before running this file directly.
-VARIANT = 2
+VARIANT = 0
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = 11
-ENV_VERSION = 11
-MODEL_VERSION = 13
+NETWORK_VERSION = "hybrid"
+ENV_VERSION = 8
+MODEL_VERSION = 1
 NUM_EPISODES = 10000
-ENCODER_PATH = './autoencoder/autoencoder_models/encoder_lenet5_env11_variant0_v1.pt'
+# ENCODER_PATH = './autoencoder/autoencoder_models/encoder_lenet5_env11_variant0_v1.pt'
+ENCODER_PATH = None
 FREEZE_ENCODER = False
-ENCODER_TYPE = "lenet5"  # Options: "cnn", "lenet5", "alexnet8", "resnet18"
+ENCODER_TYPE = "cnn"  # Options: "cnn", "lenet5", "alexnet8", "resnet18"
 GB_WINDOW = 0
 # GB output is disabled for this run. Keep the old windows here for quick restore.
 # GB_WINDOWS = [1000, 2000, 3000, 4000, 5000]
@@ -47,7 +48,7 @@ def parse_args():
         "--network_version",
         type=str,
         default=NETWORK_VERSION,
-        choices=["5", "6", "7", "8", "9", "10", "11", "a0", "a1", "a2", "a3", "a4", "a5"],
+        choices=["5", "6", "7", "8", "9", "10", "11", "hybrid", "a0", "a1", "a2", "a3", "a4", "a5"],
     )
     parser.add_argument("--env_version", type=int, default=ENV_VERSION)
     parser.add_argument("--model_version", type=int, default=MODEL_VERSION)
@@ -150,6 +151,7 @@ def build_dqn_network(network_version, env):
         "9": rainbow_dqn.DQN_v9,
         "10": rainbow_dqn.DQN_v10,
         "11": rainbow_dqn.DQN_v11,
+        "hybrid": dqn.DQN_hybrid,
         "a0": rainbow_dqn_ablation.DQN_a0,
         "a1": rainbow_dqn_ablation.DQN_a1,
         "a2": rainbow_dqn_ablation.DQN_a2,

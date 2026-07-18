@@ -7,6 +7,139 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+
+class HybridQNetwork(nn.Module):
+    """Small CNN + scalar MLP that directly predicts one Q value per action."""
+
+    def __init__(self, in_channels, grid_height, grid_width, scalar_dim, act_dim):
+        super().__init__()
+        self.cnn = nn.Sequential(
+            nn.Conv2d(in_channels, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+        grid_feature_dim = 16 * grid_height * grid_width
+        self.scalar_mlp = nn.Sequential(
+            nn.Linear(scalar_dim, 16),
+            nn.ReLU(),
+        )
+        self.q_head = nn.Sequential(
+            nn.Linear(grid_feature_dim + 16, 64),
+            nn.ReLU(),
+            nn.Linear(64, act_dim),
+        )
+
+    def forward(self, grid_obs, scalar_obs):
+        grid_features = self.cnn(grid_obs)
+        scalar_features = self.scalar_mlp(scalar_obs)
+        return self.q_head(torch.cat((grid_features, scalar_features), dim=1))
+
+
+class DQN_hybrid:
+    """Vanilla one-step DQN for environments returning (grid, scalar) observations."""
+
+    def __init__(self, env):
+        self.env = env
+        self.variant = env.variant
+        self.data_dir = env.data_dir
+        self.file_name = 'DQN_hybrid.'
+        self.network_name = 'Vanilla Hybrid DQN'
+
+        initial_grid_obs, initial_scalar_obs = env.reset('training')
+        self.in_channels, self.grid_height, self.grid_width = initial_grid_obs.shape
+        self.scalar_dim = initial_scalar_obs.shape[0]
+        self.act_dim = 5
+
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f'Using device: {self.device}')
+
+        self.episode_steps = env.episode_steps
+        self.num_episodes = 10000
+        self.batch_size = 64
+        self.gamma = 0.95
+        self.learning_rate = 1e-4
+        self.epsilon_start = 1.0
+        self.epsilon_end = 0.05
+        self.epsilon_decay_steps = self.num_episodes * 0.8
+        self.epsilon = self.epsilon_start
+        self.target_update_freq = 10
+
+        self.replay_buffer_capacity = 50000
+        self.min_replay_buffer_size = 1000
+        self.replay_buffer = []
+
+        self.q_network = self.build_q_network().to(self.device)
+        self.target_network = self.build_q_network().to(self.device)
+        self.target_network.load_state_dict(self.q_network.state_dict())
+        self.target_network.eval()
+
+        self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
+        self.loss_fn = nn.SmoothL1Loss()
+
+    def build_q_network(self):
+        return HybridQNetwork(
+            self.in_channels,
+            self.grid_height,
+            self.grid_width,
+            self.scalar_dim,
+            self.act_dim,
+        )
+
+    def _obs_to_tensors(self, observations):
+        grid = torch.from_numpy(np.stack([obs[0] for obs in observations])).float().to(self.device)
+        scalar = torch.from_numpy(np.stack([obs[1] for obs in observations])).float().to(self.device)
+        return grid, scalar
+
+    def select_action(self, obs):
+        if np.random.rand() < self.epsilon:
+            return int(np.random.randint(self.act_dim))
+
+        grid_obs, scalar_obs = obs
+        grid_tensor = torch.from_numpy(grid_obs).float().unsqueeze(0).to(self.device)
+        scalar_tensor = torch.from_numpy(scalar_obs).float().unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            q_values = self.q_network(grid_tensor, scalar_tensor)
+        return int(q_values.argmax(dim=1).item())
+
+    def optimize_model(self):
+        batch = random.sample(self.replay_buffer, self.batch_size)
+        obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = zip(*batch)
+        grid_batch, scalar_batch = self._obs_to_tensors(obs_batch)
+        next_grid_batch, next_scalar_batch = self._obs_to_tensors(next_obs_batch)
+        actions = torch.tensor(act_batch, dtype=torch.long, device=self.device)
+        rewards = torch.tensor(rew_batch, dtype=torch.float32, device=self.device)
+        dones = torch.tensor(done_batch, dtype=torch.float32, device=self.device)
+
+        q_values = self.q_network(grid_batch, scalar_batch).gather(1, actions.unsqueeze(1)).squeeze(1)
+        with torch.no_grad():
+            next_q_values = self.target_network(next_grid_batch, next_scalar_batch).max(dim=1).values
+            targets = rewards + (1.0 - dones) * self.gamma * next_q_values
+
+        loss = self.loss_fn(q_values, targets)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        return loss.item()
+
+    def store_transition(self, obs, act, rew, next_obs, done):
+        if len(self.replay_buffer) >= self.replay_buffer_capacity:
+            self.replay_buffer.pop(0)
+        self.replay_buffer.append((obs, act, rew, next_obs, done))
+
+    def ready_to_update(self):
+        return len(self.replay_buffer) >= self.min_replay_buffer_size
+
+    def update_after_episode(self, episode):
+        if (episode + 1) % self.target_update_freq == 0:
+            self.target_network.load_state_dict(self.q_network.state_dict())
+        self.epsilon = max(
+            self.epsilon_end,
+            self.epsilon - (self.epsilon_start - self.epsilon_end) / self.epsilon_decay_steps,
+        )
+
+    def save(self, model_path):
+        torch.save(self.q_network.state_dict(), model_path)
+
 # Dueling DQN network architecture
 class DuelingQNetwork(nn.Module):
     def __init__(self, obs_dim, act_dim):
