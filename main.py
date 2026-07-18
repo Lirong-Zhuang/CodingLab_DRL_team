@@ -11,13 +11,13 @@ import rainbow_dqn_ablation
 VARIANT = 0
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = 11
-ENV_VERSION = 11
-MODEL_VERSION = 21
+NETWORK_VERSION = "v9h"
+ENV_VERSION = "9h"
+MODEL_VERSION = 1
 NUM_EPISODES = 30000
-ENCODER_PATH = './autoencoder/autoencoder_models/encoder_alexnet8_env11_variant0_v1.pt'
+ENCODER_PATH = None
 FREEZE_ENCODER = False
-ENCODER_TYPE = "alexnet8"  # Options: "cnn", "lenet5", "alexnet8", "resnet18"
+ENCODER_TYPE = "cnn"  # Ignored by the hybrid network.
 GB_WINDOW = 0
 # GB output is disabled for this run. Keep the old windows here for quick restore.
 # GB_WINDOWS = [1000, 2000, 3000, 4000, 5000]
@@ -47,9 +47,14 @@ def parse_args():
         "--network_version",
         type=str,
         default=NETWORK_VERSION,
-        choices=["5", "6", "7", "8", "9", "10", "11", "hybrid", "a0", "a1", "a2", "a3", "a4", "a5"],
+        choices=["5", "6", "7", "8", "9", "10", "11", "hybrid", "v9h", "v11h", "a0", "a1", "a2", "a3", "a4", "a5"],
     )
-    parser.add_argument("--env_version", type=int, default=ENV_VERSION)
+    parser.add_argument(
+        "--env_version",
+        type=str,
+        default=str(ENV_VERSION),
+        choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "9h", "91", "10", "11", "11h", "12", "13", "14", "15", "16", "17", "18"],
+    )
     parser.add_argument("--model_version", type=int, default=MODEL_VERSION)
     parser.add_argument("--num_episodes", type=int, default=NUM_EPISODES)
     parser.add_argument("--encoder_path", type=str, default=ENCODER_PATH)
@@ -96,9 +101,11 @@ from environment_v6 import Environment_v6
 from environment_v7 import Environment_v7
 from environment_v8 import Environment_v8
 from environment_v9 import Environment_v9
+from environment_v9h import Environment_v9h
 from environment_v91 import Environment_v91
 from environment_v10 import Environment_v10
 from environment_v11 import Environment_v11
+from environment_v11h import Environment_v11h
 from environment_v12 import Environment_v12
 from environment_v13 import Environment_v13
 from environment_v14 import Environment_v14
@@ -116,32 +123,42 @@ os.makedirs(log_root_dir, exist_ok=True)
 
 
 def build_env(env_version, variant, data_dir):
+    env_version = str(env_version).lower()
     env_classes = {
-        1: Environment,
-        2: Environment_v2,
-        3: Environment_v3,
-        4: Environment_v4,
-        5: Environment_v5,
-        6: Environment_v6,
-        7: Environment_v7,
-        8: Environment_v8,
-        9: Environment_v9,
-        91: Environment_v91,
-        10: Environment_v10,
-        11: Environment_v11,
-        12: Environment_v12,
-        13: Environment_v13,
-        14: Environment_v14,
-        15: Environment_v15,
-        16: Environment_v16,
-        17: Environment_v17,
-        18: Environment_v18,
+        "1": Environment,
+        "2": Environment_v2,
+        "3": Environment_v3,
+        "4": Environment_v4,
+        "5": Environment_v5,
+        "6": Environment_v6,
+        "7": Environment_v7,
+        "8": Environment_v8,
+        "9": Environment_v9,
+        "9h": Environment_v9h,
+        "91": Environment_v91,
+        "10": Environment_v10,
+        "11": Environment_v11,
+        "11h": Environment_v11h,
+        "12": Environment_v12,
+        "13": Environment_v13,
+        "14": Environment_v14,
+        "15": Environment_v15,
+        "16": Environment_v16,
+        "17": Environment_v17,
+        "18": Environment_v18,
     }
     return env_classes[env_version](variant, data_dir)
 
 
 def build_dqn_network(network_version, env):
     network_version = str(network_version).lower()
+    required_hybrid_envs = {"v9h": "9h.", "v11h": "11h."}
+    required_env_name = required_hybrid_envs.get(network_version)
+    if required_env_name is not None and env.env_name != required_env_name:
+        raise ValueError(
+            f"network_version={network_version!r} requires "
+            f"env_version={required_env_name[:-1]!r}, got env {env.env_name!r}."
+        )
     network_classes = {
         "5": dqn.DQN_v5,
         "6": rainbow_dqn.DQN_v6,
@@ -151,6 +168,8 @@ def build_dqn_network(network_version, env):
         "10": rainbow_dqn.DQN_v10,
         "11": rainbow_dqn.DQN_v11,
         "hybrid": dqn.DQN_hybrid,
+        "v9h": rainbow_dqn.DQN_v9h,
+        "v11h": rainbow_dqn.DQN_v11h,
         "a0": rainbow_dqn_ablation.DQN_a0,
         "a1": rainbow_dqn_ablation.DQN_a1,
         "a2": rainbow_dqn_ablation.DQN_a2,

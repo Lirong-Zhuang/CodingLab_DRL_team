@@ -983,6 +983,24 @@ class DQN_v9:
         torch.save(self.q_network.state_dict(), model_path)
 
 
+class DQN_v9h(DQN_v9):
+    """DQN_v8 Rainbow algorithm adapted to Environment_v9h hybrid input."""
+
+    def __init__(self, env):
+        super().__init__(env)
+        self.file_name = 'DQN_v9h.'
+        self.network_name = 'Rainbow DQN v8 Hybrid (Environment v9 features)'
+
+
+class DQN_v11h(DQN_v9):
+    """DQN_v8 Rainbow algorithm adapted to Environment_v11h hybrid input."""
+
+    def __init__(self, env):
+        super().__init__(env)
+        self.file_name = 'DQN_v11h.'
+        self.network_name = 'Rainbow DQN v8 Hybrid (Environment v11 features)'
+
+
 
 # Full rainbow DQN for CNN (v7 like)
 class DQN_v8:
