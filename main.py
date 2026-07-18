@@ -11,14 +11,13 @@ import rainbow_dqn_ablation
 VARIANT = 0
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = "hybrid"
-ENV_VERSION = 8
-MODEL_VERSION = 1
-NUM_EPISODES = 10000
-# ENCODER_PATH = './autoencoder/autoencoder_models/encoder_lenet5_env11_variant0_v1.pt'
-ENCODER_PATH = None
+NETWORK_VERSION = 11
+ENV_VERSION = 11
+MODEL_VERSION = 21
+NUM_EPISODES = 30000
+ENCODER_PATH = './autoencoder/autoencoder_models/encoder_alexnet8_env11_variant0_v1.pt'
 FREEZE_ENCODER = False
-ENCODER_TYPE = "cnn"  # Options: "cnn", "lenet5", "alexnet8", "resnet18"
+ENCODER_TYPE = "alexnet8"  # Options: "cnn", "lenet5", "alexnet8", "resnet18"
 GB_WINDOW = 0
 # GB output is disabled for this run. Keep the old windows here for quick restore.
 # GB_WINDOWS = [1000, 2000, 3000, 4000, 5000]
