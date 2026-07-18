@@ -9,7 +9,6 @@
 #SBATCH --mail-user=lirong.zhuang@tum.de
 #SBATCH --time=24:00:00
 
-
 PROJECT_DIR="${PROJECT_DIR:-$SLURM_SUBMIT_DIR}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-$PROJECT_DIR/tf_container_dgx-a100-80.sqsh}"
 
@@ -36,14 +35,8 @@ if [[ "${FREEZE_ENCODER:-0}" == "1" || "${FREEZE_ENCODER:-}" == "true" || "${FRE
 fi
 
 srun --mpi=pmi2 \
-     --container-mounts="${PROJECT_DIR}:/mnt/code" \
-     --container-image="${CONTAINER_IMAGE}" \
-     --container-workdir=/mnt/code \
-     python main.py \
-       "${MAIN_ARGS[@]}"
-
-				
-						
-						
-						
-						
+  --container-mounts="${PROJECT_DIR}:/mnt/code" \
+  --container-image="${CONTAINER_IMAGE}" \
+  --container-workdir=/mnt/code \
+  python main.py \
+  "${MAIN_ARGS[@]}"
