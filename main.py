@@ -8,11 +8,11 @@ import rainbow_dqn_ablation
 
 
 # Edit these values before running this file directly.
-VARIANT = 0
+VARIANT = 1
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = "v9h"
-ENV_VERSION = "9h"
+NETWORK_VERSION = 8
+ENV_VERSION = 11
 MODEL_VERSION = 1
 NUM_EPISODES = 30000
 ENCODER_PATH = None
