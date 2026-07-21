@@ -6,8 +6,8 @@ from environment_v9 import Environment_v9
 class Environment_v11(Environment_v9):
     """Environment v9 with an additional heuristic-value observation channel."""
 
-    def __init__(self, variant, data_dir):
-        super().__init__(variant, data_dir)
+    def __init__(self, variant, data_dir, test_data_dir=None):
+        super().__init__(variant, data_dir, test_data_dir=test_data_dir)
         self.env_name = "11."
 
     # CNN observation shape: 7 x 5 x 5

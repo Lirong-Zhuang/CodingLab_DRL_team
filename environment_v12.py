@@ -6,8 +6,8 @@ from environment_v11 import Environment_v11
 class Environment_v12(Environment_v11):
     """Environment v11 with channel 6 changed to normalized item-target distance."""
 
-    def __init__(self, variant, data_dir):
-        super().__init__(variant, data_dir)
+    def __init__(self, variant, data_dir, test_data_dir=None):
+        super().__init__(variant, data_dir, test_data_dir=test_data_dir)
         self.env_name = "12."
         self.max_target_distance = max(
             self.get_dist_from_coord(cell, self.target_loc)

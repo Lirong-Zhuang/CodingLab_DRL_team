@@ -6,10 +6,10 @@ from environment_v9 import Environment_v9
 class Environment_v13(Environment_v9):
     """Variant-2-only Environment v9 with a blocked-cell observation channel."""
 
-    def __init__(self, variant, data_dir):
+    def __init__(self, variant, data_dir, test_data_dir=None):
         if variant != 2:
             raise ValueError("Environment_v13 is only intended for variant 2.")
-        super().__init__(variant, data_dir)
+        super().__init__(variant, data_dir, test_data_dir=test_data_dir)
         self.env_name = "13."
         all_cells = [
             (r, c)

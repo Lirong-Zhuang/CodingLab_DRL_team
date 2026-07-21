@@ -1,4 +1,5 @@
 import random
+import os
 from copy import deepcopy
 
 import pandas as pd
@@ -9,8 +10,8 @@ from environment_v9 import Environment_v9
 class Environment_v91(Environment_v9):
     """Environment v9 using the focused variant-0 validation episode list."""
 
-    def __init__(self, variant, data_dir):
-        super().__init__(variant, data_dir)
+    def __init__(self, variant, data_dir, test_data_dir=None):
+        super().__init__(variant, data_dir, test_data_dir=test_data_dir)
         self.env_name = "91."
         self.validation_episodes = pd.read_csv(
             self.data_dir + f'/variant_{self.variant}/validation_episodes_focus1.csv'
@@ -43,9 +44,19 @@ class Environment_v91(Environment_v9):
             episode = random.choice(self.remaining_training_episodes)
             self.remaining_training_episodes.remove(episode)
 
-        self.data = pd.read_csv(
-            self.data_dir + f'/variant_{self.variant}/episode_data/episode_{episode:03d}.csv',
-            index_col=0
-        )
+        if mode == "testing" and self.test_data_dir is not None:
+            episode_path = os.path.join(
+                self.test_data_dir,
+                f'variant_{self.variant}',
+                f'episode_{episode:03d}.csv',
+            )
+        else:
+            episode_path = os.path.join(
+                self.data_dir,
+                f'variant_{self.variant}',
+                'episode_data',
+                f'episode_{episode:03d}.csv',
+            )
+        self.data = pd.read_csv(episode_path, index_col=0)
 
         return self.get_obs()
