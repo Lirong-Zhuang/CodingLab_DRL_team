@@ -9,6 +9,7 @@
 # it is not picked up (if agent wants to pick it up, it has to stay in the cell in the next time step)
 
 import random
+import os
 import pandas as pd
 from copy import deepcopy
 from itertools import compress
@@ -16,7 +17,7 @@ import numpy as np
 
 
 class Environment_v9(object):
-    def __init__(self, variant, data_dir):
+    def __init__(self, variant, data_dir, test_data_dir=None):
         self.variant = variant
         self.vertical_cell_count = 5
         self.horizontal_cell_count = 5
@@ -27,6 +28,7 @@ class Environment_v9(object):
         self.max_response_time = 15 if self.variant == 2 else 10
         self.reward = 25 if self.variant == 2 else 15
         self.data_dir = data_dir
+        self.test_data_dir = test_data_dir
         self.env_name = "9."
 
         self.training_episodes = pd.read_csv(self.data_dir + f'/variant_{self.variant}/training_episodes.csv')
@@ -35,6 +37,13 @@ class Environment_v9(object):
         self.validation_episodes = self.validation_episodes.validation_episodes.tolist()
         self.test_episodes = pd.read_csv(self.data_dir + f'/variant_{self.variant}/test_episodes.csv')
         self.test_episodes = self.test_episodes.test_episodes.tolist()
+        if self.test_data_dir is not None:
+            final_test_dir = os.path.join(self.test_data_dir, f'variant_{self.variant}')
+            self.test_episodes = sorted(
+                int(file_name[len('episode_'):-len('.csv')])
+                for file_name in os.listdir(final_test_dir)
+                if file_name.startswith('episode_') and file_name.endswith('.csv')
+            )
 
         self.remaining_training_episodes = deepcopy(self.training_episodes)
         self.validation_episode_counter = 0
@@ -83,8 +92,20 @@ class Environment_v9(object):
                 self.remaining_training_episodes = deepcopy(self.training_episodes)
             episode = random.choice(self.remaining_training_episodes)
             self.remaining_training_episodes.remove(episode)
-        self.data = pd.read_csv(self.data_dir + f'/variant_{self.variant}/episode_data/episode_{episode:03d}.csv',
-                                index_col=0)
+        if mode == "testing" and self.test_data_dir is not None:
+            episode_path = os.path.join(
+                self.test_data_dir,
+                f'variant_{self.variant}',
+                f'episode_{episode:03d}.csv',
+            )
+        else:
+            episode_path = os.path.join(
+                self.data_dir,
+                f'variant_{self.variant}',
+                'episode_data',
+                f'episode_{episode:03d}.csv',
+            )
+        self.data = pd.read_csv(episode_path, index_col=0)
 
         return self.get_obs()
 

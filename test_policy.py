@@ -27,13 +27,14 @@ from aschley_dqn import AschleyCNNv2
 
 
 # MODEL_NAME = 'DQN_v8.13.2_variant_2'
-MODEL_NAME = 'Asch_v2.1_variant_2'
-MODEL_PATH = f'./models2/{MODEL_NAME}.pt'
-VARIANT = 2
+MODEL_NAME = 'DQN_v8.9.2_variant_0'
+MODEL_PATH = f'./models/{MODEL_NAME}.pt'
+VARIANT = 0
 DATA_DIR = './data'
+FINAL_TEST_DATA_DIR = './data/final_test_episodes'
 NUM_TEST_EPISODES = 100
-RESULT_DIR = './test_result'
-RESULT_FILE_NAME = 'Test_Results_Asch_v2.1_variant_2.csv'
+RESULT_DIR = './final_test_result'
+RESULT_FILE_NAME = 'Test_Results_DQN_v8.9.2_variant_0.csv'
 
 
 def test_policy(env):
@@ -41,7 +42,7 @@ def test_policy(env):
     episode_results = []
 
     # network
-    network = AschleyCNNv2(env)
+    network = rainbow_dqn.DQN_v8(env)
     network.q_network.load_state_dict(torch.load(MODEL_PATH, map_location=network.device))
     network.q_network.eval()
     network.epsilon = 0
@@ -86,6 +87,10 @@ def save_test_results(env, episode_results, avg_test_rew):
 
 if __name__ == '__main__':
 
-    env = Environment_vaschley(variant=VARIANT, data_dir=DATA_DIR)
+    env = Environment_v9(
+        variant=VARIANT,
+        data_dir=DATA_DIR,
+        test_data_dir=FINAL_TEST_DATA_DIR,
+    )
 
     test_policy(env)  # test the trained policy
