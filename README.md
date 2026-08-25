@@ -45,8 +45,8 @@ Python 3.11 is recommended.
 ### Windows PowerShell
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+python -m venv codinglab_drl
+codinglab_drl\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
@@ -54,17 +54,31 @@ pip install -r requirements.txt
 ### Linux or macOS
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv codinglab_drl
+source codinglab_drl/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
+
+The generated `codinglab_drl/` directory is ignored by Git. It contains local dependencies only and must not be committed.
 
 For a CUDA-enabled PyTorch installation, install the PyTorch build matching the local CUDA version before running `pip install -r requirements.txt`.
 
 ## Train
 
-All algorithms use `main.py` and the existing episode data under `data/variant_<n>`.
+All training commands must be run while the `codinglab_drl` virtual environment is activated. If a new terminal is opened, activate it again before training:
+
+```powershell
+# Windows PowerShell
+codinglab_drl\Scripts\Activate.ps1
+```
+
+```bash
+# Linux or macOS
+source codinglab_drl/bin/activate
+```
+
+After activation, all algorithms use `main.py` and the existing episode data under `data/variant_<n>`.
 
 ```powershell
 # Ashley CNN-DQN
@@ -97,3 +111,15 @@ python main.py --algorithm rainbow_encoder --variant 0 --encoder_path PATH_TO_EN
 ```
 
 Omit `--freeze_encoder` to fine-tune the encoder during Rainbow training.
+
+## Final results
+
+The selected model for each variant outperformed the greedy baseline on the final test set:
+
+| Variant | Selected model | Test reward | Greedy reward |
+|---:|---|---:|---:|
+| 0 | Rainbow DQN | 222.72 | 216.920 |
+| 1 | DQN | 395.91 | 384.255 |
+| 2 | PPO | 261.73 | 249.750 |
+
+![Final test rewards compared with the greedy baseline](README_results.png)
