@@ -13,7 +13,7 @@ The release intentionally keeps the original `main.py` training structure. Exper
 The selected model for each variant outperformed the greedy baseline on the final test set:
 
 | Variant | Selected model | Test reward | Greedy reward |
-|---:|---|---:|---:|
+|:---|:---|:---|:---|
 | 0 | Rainbow DQN | 222.72 | 216.920 |
 | 1 | DQN | 395.91 | 384.255 |
 | 2 | PPO | 261.73 | 249.750 |
