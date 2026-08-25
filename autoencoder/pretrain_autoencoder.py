@@ -15,10 +15,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from autoencoder_model import build_autoencoder
-from environment_v5 import Environment_v5
-from environment_v9 import Environment_v9
-from environment_v11 import Environment_v11
+from autoencoder.autoencoder_model import build_autoencoder
+from environments.rainbow_cnn_environment import RainbowCNNEnvironment
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -238,11 +236,7 @@ def train_autoencoder(args):
         f"validation={len(val_episodes)} test={len(test_episodes)}"
     )
 
-    env_classes = {
-        5: Environment_v5,
-        9: Environment_v9,
-        11: Environment_v11,
-    }
+    env_classes = {11: RainbowCNNEnvironment}
     train_env = env_classes[args.env_version](variant=args.variant, data_dir=args.data_dir)
     val_env = env_classes[args.env_version](variant=args.variant, data_dir=args.data_dir)
     initial_obs = train_env.reset("training")
@@ -398,7 +392,7 @@ def train_autoencoder(args):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_version", type=int, default=11, choices=[5, 9, 11])
+    parser.add_argument("--env_version", type=int, default=11, choices=[11])
     parser.add_argument("--variant", type=int, default=0, choices=[0, 1, 2])
     parser.add_argument("--model_version", type=int, default=1)
     parser.add_argument("--data_dir", type=str, default="./data")

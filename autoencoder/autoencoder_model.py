@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from pretrained_model import AlexNet8Encoder, LeNet5Encoder, ResNet18Encoder
+from algorithms.pretrained_model import AlexNet8Encoder, LeNet5Encoder, ResNet18Encoder
 
 
 class GridEncoderEnv5(nn.Module):

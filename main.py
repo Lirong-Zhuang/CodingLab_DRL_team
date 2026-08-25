@@ -1,18 +1,17 @@
 import argparse
 import time
 from torch.utils.tensorboard import SummaryWriter
-import dqn
-import ppo
-import rainbow_dqn
-import rainbow_dqn_ablation
+
+from algorithms import dqn, ppo, rainbow
+from environments.base_environment import Environment
+from environments.rainbow_cnn_environment import RainbowCNNEnvironment
 
 
 # Edit these values before running this file directly.
 VARIANT = 1
 SEED = 777
 DATA_DIR = './data'
-NETWORK_VERSION = 8
-ENV_VERSION = 11
+ALGORITHM = "rainbow"
 MODEL_VERSION = 1
 NUM_EPISODES = 30000
 ENCODER_PATH = None
@@ -28,8 +27,7 @@ class Config:
     variant = VARIANT
     seed = SEED
     data_dir = DATA_DIR
-    env_version = ENV_VERSION
-    network_version = NETWORK_VERSION
+    algorithm = ALGORITHM
     model_version = MODEL_VERSION
     num_episodes = NUM_EPISODES
     encoder_path = ENCODER_PATH
@@ -44,16 +42,10 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--data_dir", type=str, default=DATA_DIR)
     parser.add_argument(
-        "--network_version",
+        "--algorithm",
         type=str,
-        default=NETWORK_VERSION,
-        choices=["5", "6", "7", "8", "9", "10", "11", "hybrid", "v9h", "v11h", "a0", "a1", "a2", "a3", "a4", "a5"],
-    )
-    parser.add_argument(
-        "--env_version",
-        type=str,
-        default=str(ENV_VERSION),
-        choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "9h", "91", "10", "11", "11h", "12", "13", "14", "15", "16", "17", "18"],
+        default=ALGORITHM,
+        choices=["dqn", "rainbow", "rainbow_encoder", "ppo"],
     )
     parser.add_argument("--model_version", type=int, default=MODEL_VERSION)
     parser.add_argument("--num_episodes", type=int, default=NUM_EPISODES)
@@ -91,106 +83,39 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-# initialize environment
-from environment import Environment
-from environment_v2 import Environment_v2
-from environment_v3 import Environment_v3
-from environment_v4 import Environment_v4
-from environment_v5 import Environment_v5
-from environment_v6 import Environment_v6
-from environment_v7 import Environment_v7
-from environment_v8 import Environment_v8
-from environment_v9 import Environment_v9
-from environment_v9h import Environment_v9h
-from environment_v91 import Environment_v91
-from environment_v10 import Environment_v10
-from environment_v11 import Environment_v11
-from environment_v11h import Environment_v11h
-from environment_v12 import Environment_v12
-from environment_v13 import Environment_v13
-from environment_v14 import Environment_v14
-from environment_v15 import Environment_v15
-from environment_v16 import Environment_v16
-from environment_v17 import Environment_v17
-from environment_v18 import Environment_v18
-
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
 variant = args.variant  # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
-model_dir = './models3'
-log_root_dir = './logs3'
+model_dir = './outputs/checkpoints'
+log_root_dir = './outputs/tensorboard'
 os.makedirs(model_dir, exist_ok=True)
 os.makedirs(log_root_dir, exist_ok=True)
 
 
-def build_env(env_version, variant, data_dir):
-    env_version = str(env_version).lower()
-    env_classes = {
-        "1": Environment,
-        "2": Environment_v2,
-        "3": Environment_v3,
-        "4": Environment_v4,
-        "5": Environment_v5,
-        "6": Environment_v6,
-        "7": Environment_v7,
-        "8": Environment_v8,
-        "9": Environment_v9,
-        "9h": Environment_v9h,
-        "91": Environment_v91,
-        "10": Environment_v10,
-        "11": Environment_v11,
-        "11h": Environment_v11h,
-        "12": Environment_v12,
-        "13": Environment_v13,
-        "14": Environment_v14,
-        "15": Environment_v15,
-        "16": Environment_v16,
-        "17": Environment_v17,
-        "18": Environment_v18,
-    }
-    return env_classes[env_version](variant, data_dir)
+def build_env(algorithm, variant, data_dir):
+    if algorithm == "ppo":
+        return Environment(variant, data_dir)
+    return RainbowCNNEnvironment(variant, data_dir)
 
 
-def build_dqn_network(network_version, env):
-    network_version = str(network_version).lower()
-    required_hybrid_envs = {"v9h": "9h.", "v11h": "11h."}
-    required_env_name = required_hybrid_envs.get(network_version)
-    if required_env_name is not None and env.env_name != required_env_name:
-        raise ValueError(
-            f"network_version={network_version!r} requires "
-            f"env_version={required_env_name[:-1]!r}, got env {env.env_name!r}."
-        )
+def build_dqn_network(algorithm, env):
     network_classes = {
-        "5": dqn.DQN_v5,
-        "6": rainbow_dqn.DQN_v6,
-        "7": rainbow_dqn.DQN_v7,
-        "8": rainbow_dqn.DQN_v8,
-        "9": rainbow_dqn.DQN_v9,
-        "10": rainbow_dqn.DQN_v10,
-        "11": rainbow_dqn.DQN_v11,
-        "hybrid": dqn.DQN_hybrid,
-        "v9h": rainbow_dqn.DQN_v9h,
-        "v11h": rainbow_dqn.DQN_v11h,
-        "a0": rainbow_dqn_ablation.DQN_a0,
-        "a1": rainbow_dqn_ablation.DQN_a1,
-        "a2": rainbow_dqn_ablation.DQN_a2,
-        "a3": rainbow_dqn_ablation.DQN_a3,
-        "a4": rainbow_dqn_ablation.DQN_a4,
-        "a5": rainbow_dqn_ablation.DQN_a5,
+        "dqn": dqn.DQN_CNN_v5,
+        "rainbow": rainbow.RainbowDQN,
     }
-    if network_version == "11":
+    if algorithm == "rainbow_encoder":
         encoder_path = args.encoder_path
         if isinstance(encoder_path, str) and encoder_path.lower() in {"", "none", "null"}:
             encoder_path = None
-        return rainbow_dqn.DQN_v11(
+        return rainbow.EncoderDecoderRainbowDQN(
             env,
             encoder_path=encoder_path,
             freeze_encoder=args.freeze_encoder,
             encoder_type=args.encoder_type,
         )
-    return network_classes[network_version](env)
+    return network_classes[algorithm](env)
 
 
-env = build_env(args.env_version, variant, data_dir)
+env = build_env(args.algorithm, variant, data_dir)
 
 
 # DQN validation function
@@ -232,14 +157,14 @@ def validate_dqn(env, network, num_validation_episodes):
 def train_dqn(env):
 
     ##--------Version Information--------##
-    network = build_dqn_network(args.network_version, env)
+    network = build_dqn_network(args.algorithm, env)
     if args.num_episodes is not None:
         network.num_episodes = args.num_episodes
         if hasattr(network, 'epsilon_decay_steps'):
             network.epsilon_decay_steps = network.num_episodes * 0.8
     model_version = args.model_version
     note = (
-        f'network_version: {args.network_version}, env_version: {args.env_version}, '
+        f'algorithm: {args.algorithm}, environment: {env.__class__.__name__}, '
         f'encoder_type: {args.encoder_type}, encoder_path: {args.encoder_path}, '
         f'freeze_encoder: {args.freeze_encoder}'
     )
@@ -427,8 +352,10 @@ def train_ppo(env):
 
     ##--------Version Information--------##
     network = ppo.PPO_v1(env)
-    model_version = 4
-    note = "NA"
+    network.num_episodes = args.num_episodes
+    rollout_episodes = 10
+    model_version = args.model_version
+    note = "Lejla PPO with behavioural-cloning warm start"
     ##----------------------------------##
 
     start_time = time.time()
@@ -462,7 +389,7 @@ def train_ppo(env):
     
     # tensor-board writer
     writer = SummaryWriter(log_dir=log_dir)
-    writer.add_text('Hyperparameters', f'num_episodes: {network.num_episodes}, rollout_steps: {network.rollout_steps}, gamma: {network.gamma}, learning_rate: {network.learning_rate}, clip_epsilon: {network.clip_epsilon}, update_epochs: {network.update_epochs}, entropy_coef: {network.entropy_coef}, value_coef: {network.value_coef}, max_grad_norm: {network.max_grad_norm}', 0)
+    writer.add_text('Hyperparameters', f'num_episodes: {network.num_episodes}, rollout_episodes: {rollout_episodes}, gamma: {network.gamma}, learning_rate: {network.learning_rate}, clip_epsilon: {network.clip_epsilon}, update_epochs: {network.update_epochs}, entropy_coef: {network.entropy_coef}, value_coef: {network.value_coef}, max_grad_norm: {network.max_grad_norm}', 0)
     writer.add_text('Model_info', f'Model: {run_name}, Variant: {env.variant}', 0)
     writer.add_text('Note', note, 0)
     writer.add_text('GB', f'gb_window: {gb_window}, gb_model_path: {gb_model_path}', 0)
@@ -474,8 +401,12 @@ def train_ppo(env):
     rollout_dones = []
     rollout_values = []
 
+    if network.bc_episodes > 0:
+        network.run_bc_phase()
+
     # running
     for episode in range(num_episodes):
+        network.decay_entropy(episode)
         obs = env.reset('training')
         episode_reward = 0
 
@@ -499,7 +430,7 @@ def train_ppo(env):
         writer.add_scalar('Reward/train', episode_reward, episode + 1)
 
         # update rollout data
-        if (episode + 1) % network.rollout_episodes == 0:
+        if (episode + 1) % rollout_episodes == 0:
             returns, advantages = network.compute_returns(
                 rollout_rewards,
                 rollout_dones,
@@ -586,4 +517,7 @@ def train_ppo(env):
 
 # TODO: execute training
 if __name__ == '__main__':
-    train_dqn(env)
+    if args.algorithm == "ppo":
+        train_ppo(env)
+    else:
+        train_dqn(env)

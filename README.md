@@ -1,137 +1,99 @@
-# CodingLab_DRL_Zhuang
+# CodingLab Deep Reinforcement Learning
 
+This repository is the final course release combining the work of the three team members:
 
+- **Ashley:** standard and CNN-based DQN implementations in `algorithms/dqn.py`.
+- **dev_zhuang:** Rainbow DQN, the separated encoder/Q-head Rainbow variant, and autoencoder experiments.
+- **Lejla:** PPO with behavioural-cloning warm start in `algorithms/ppo.py`.
 
-# Setup
+The release intentionally keeps the original `main.py` training structure. Experiment logs, trained models, intermediate statistics and visualizations are not included.
 
-## Python version
+## Project structure
 
-Python 3.11 is recommended. This project was tested with Python 3.11.6.
-
-## Create virtual environment
-
+```text
+.
+|-- main.py
+|-- requirements.txt
+|-- algorithms/
+|   |-- dqn.py
+|   |-- rainbow.py
+|   |-- pretrained_model.py
+|   `-- ppo.py
+|-- environments/
+|   |-- base_environment.py
+|   `-- rainbow_cnn_environment.py
+|-- autoencoder/
+|   |-- autoencoder_model.py
+|   `-- pretrain_autoencoder.py
+`-- data/
+    |-- variant_0/
+    |-- variant_1/
+    `-- variant_2/
 ```
+
+`RainbowCNNEnvironment` is the final v11 environment from the Rainbow development line. It produces a `7 x 5 x 5` CNN observation containing agent position, load, remaining time, item presence, item lifetime, reachability and heuristic value.
+
+`algorithms/rainbow.py` exposes only two training agents:
+
+- `RainbowDQN`: the final end-to-end Rainbow CNN implementation, formerly called `DQN_v8`.
+- `EncoderDecoderRainbowDQN`: the former `DQN_v11`, with a separate encoder and distributional Q head. It can load and optionally freeze a pretrained encoder.
+
+## Create the virtual environment
+
+Python 3.11 is recommended.
+
+### Windows PowerShell
+
+```powershell
 python -m venv .venv
-```
-
-## Activate
-
-Linux/macOS:
-
-```
-source .venv/bin/activate
-```
-
-Windows:
-
-```
-.\.venv\Scripts\Activate.ps1
-```
-
-## Install dependencies
-
-```
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-and Pytorch, choose the version with or without CUDA according to your device
+### Linux or macOS
 
-```
-python -m pip install torch torchvision torchaudio
-```
-
-or
-
-```
-python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-## Run
+For a CUDA-enabled PyTorch installation, install the PyTorch build matching the local CUDA version before running `pip install -r requirements.txt`.
 
-```
-python main.py
-```
+## Train
 
-## Tensor-Board
+All algorithms use `main.py` and the existing episode data under `data/variant_<n>`.
 
-```
-tensorboard --logdir logs
-```
+```powershell
+# Ashley CNN-DQN
+python main.py --algorithm dqn --variant 0 --num_episodes 10000
 
+# Final Rainbow DQN
+python main.py --algorithm rainbow --variant 0 --num_episodes 10000
 
-# Train in Cluster
+# Rainbow with separate encoder and Q head
+python main.py --algorithm rainbow_encoder --variant 0 --num_episodes 10000
 
-## Upload Files
-
-```
-cd ..../CodingLab_DRL_team
-sftp <Account>@<host>
-
-cd code_for_zhuang
-
-put ....
-put -r ...
-
-bye
+# Lejla PPO
+python main.py --algorithm ppo --variant 0 --num_episodes 10000
 ```
 
-## SSH Connection
+Variants `0`, `1` and `2` are supported. Change `--model_version` when repeating a run with the same configuration. Runtime checkpoints and TensorBoard files are written to `outputs/`, which is ignored by Git.
 
-```
-ssh <Account>@<host>
+### Train with a pretrained encoder
 
-cd code_for_zhuang
-```
+First pretrain the autoencoder on the final Rainbow CNN environment:
 
-## Create Enroot Environment
-
-```
-cd ~/code_for_zhuang
-
-salloc -p lrz-dgx-a100-80x8 --gres=gpu:1
-srun --pty bash
-
-enroot import docker://nvcr.io#nvidia/pytorch:24.12-py3
-
-ls *.sqsh
-
-enroot create --name codinglab_drl_zhuang <IMAGE_NAME>.sqsh
-enroot start --root --rw codinglab_drl_zhuang
-
-pip install pandas scipy tensorboard==2.20.0 tensorflow==2.20.0
-
-exit
-
-enroot export -o tf_container_dgx-a100-80.sqsh codinglab_drl_zhuang
-ls -lh tf_container_dgx-a100-80.sqsh
+```powershell
+python -m autoencoder.pretrain_autoencoder --env_version 11 --variant 0
 ```
 
-## Check Mission Process
+Then pass the saved encoder checkpoint to Rainbow:
 
-```
-squeue -u $USER
-```
-
-## Submit Mission
-
-```
-bash cluster/master_GPU.sh 
+```powershell
+python main.py --algorithm rainbow_encoder --variant 0 --encoder_path PATH_TO_ENCODER.pt --freeze_encoder
 ```
 
-## Download Files
-
-```
-cd /home/zhuanglr/Documents/TUM/CodingLab/CodingLab_DRL_team
-
-sftp <Account>@<host>
-
-cd code_for_zhuang
-
-get <File Name>.out
-
-get models/<Model Name>.pt
-
-get -r logs2/DQN_v8.5.13_variant_0
-
-bye
-```
+Omit `--freeze_encoder` to fine-tune the encoder during Rainbow training.
