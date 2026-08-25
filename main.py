@@ -3,7 +3,8 @@ import time
 from torch.utils.tensorboard import SummaryWriter
 
 from algorithms import dqn, ppo, rainbow
-from environments.base_environment import Environment
+from environments.dqn_environment import DQNEnvironment
+from environments.ppo_environment import PPOEnvironment
 from environments.rainbow_cnn_environment import RainbowCNNEnvironment
 
 
@@ -87,7 +88,9 @@ os.makedirs(log_root_dir, exist_ok=True)
 
 def build_env(algorithm, variant, data_dir):
     if algorithm == "ppo":
-        return Environment(variant, data_dir)
+        return PPOEnvironment(variant, data_dir)
+    if algorithm == "dqn":
+        return DQNEnvironment(variant, data_dir)
     return RainbowCNNEnvironment(variant, data_dir)
 
 

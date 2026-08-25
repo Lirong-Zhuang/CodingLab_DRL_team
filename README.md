@@ -2,9 +2,9 @@
 
 This repository is the final course release combining the work of the three team members:
 
-- **Ashley:** standard and CNN-based DQN implementations in `algorithms/dqn.py`.
-- **dev_zhuang:** Rainbow DQN, the separated encoder/Q-head Rainbow variant, and autoencoder experiments.
-- **Lejla:** PPO with behavioural-cloning warm start in `algorithms/ppo.py`.
+- **Lejla Mehmedović:** PPO with behavioural-cloning warm start.
+- **Fang Ning Hsu:** standard and CNN-based DQN implementations.
+- **Lirong Zhuang:** Rainbow DQN and autoencoder experiments.
 
 The release intentionally keeps the original `main.py` training structure. Experiment logs, trained models, intermediate statistics and visualizations are not included.
 
@@ -31,6 +31,9 @@ The selected model for each variant outperformed the greedy baseline on the fina
 |   `-- ppo.py
 |-- environments/
 |   |-- base_environment.py
+|   |-- dqn_environment.py
+|   |-- ppo_environment.py
+|   |-- spatial_distribution.py
 |   `-- rainbow_cnn_environment.py
 |-- autoencoder/
 |   |-- autoencoder_model.py
@@ -42,6 +45,12 @@ The selected model for each variant outperformed the greedy baseline on the fina
 ```
 
 `RainbowCNNEnvironment` is the final v11 environment from the Rainbow development line. It produces a `7 x 5 x 5` CNN observation containing agent position, load, remaining time, item presence, item lifetime, reachability and heuristic value.
+
+Each algorithm uses its corresponding environment automatically:
+
+- `DQNEnvironment` provides the CNN observations and spatial features used by DQN.
+- `PPOEnvironment` provides the engineered state features used by PPO.
+- `RainbowCNNEnvironment` provides the final v11 seven-channel observations used by both Rainbow variants.
 
 `algorithms/rainbow.py` exposes only two training agents:
 
