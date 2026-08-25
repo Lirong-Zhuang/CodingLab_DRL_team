@@ -8,6 +8,16 @@ This repository is the final course release combining the work of the three team
 
 The release intentionally keeps the original `main.py` training structure. Experiment logs, trained models, intermediate statistics and visualizations are not included.
 
+## Final results
+
+The selected model for each variant outperformed the greedy baseline on the final test set:
+
+| Variant | Selected model | Test reward | Greedy reward |
+|---:|---|---:|---:|
+| 0 | Rainbow DQN | 222.72 | 216.920 |
+| 1 | DQN | 395.91 | 384.255 |
+| 2 | PPO | 261.73 | 249.750 |
+
 ## Project structure
 
 ```text
@@ -111,15 +121,3 @@ python main.py --algorithm rainbow_encoder --variant 0 --encoder_path PATH_TO_EN
 ```
 
 Omit `--freeze_encoder` to fine-tune the encoder during Rainbow training.
-
-## Final results
-
-The selected model for each variant outperformed the greedy baseline on the final test set:
-
-| Variant | Selected model | Test reward | Greedy reward |
-|---:|---|---:|---:|
-| 0 | Rainbow DQN | 222.72 | 216.920 |
-| 1 | DQN | 395.91 | 384.255 |
-| 2 | PPO | 261.73 | 249.750 |
-
-![Final test rewards compared with the greedy baseline](README_results.png)
