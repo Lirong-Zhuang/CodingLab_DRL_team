@@ -232,7 +232,7 @@ ActorCritic = HybridActorCritic
 
 
 # ---------------------------------------------------------------------------
-# PPO_v1  (name kept for test_ppo_leaderboard.py compatibility)
+# PPO_v1 
 #
 # Step overview:
 #   1. GreedyOracle creates demonstration actions for behavioural cloning only.
