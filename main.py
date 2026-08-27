@@ -5,7 +5,7 @@ from torch.utils.tensorboard import SummaryWriter
 from algorithms import dqn, ppo, rainbow
 from environments.dqn_environment import Environment as DQNEnvironment
 from environments.ppo_environment import Environment as PPOEnvironment
-from environments.rainbow_environment import Environment_v11 as RainbowEnvironment
+from environments.rainbow_environment import Environment as RainbowEnvironment
 
 
 # Edit these values before running this file directly.
@@ -107,6 +107,11 @@ def build_dqn_network(algorithm, env):
     return rainbow.rainbow_dqn(env)
 
 
+def build_run_name(algorithm, model_version, variant):
+    prefix = 'rainbow_dqn' if algorithm == 'rainbow' else algorithm
+    return f'{prefix}_v{model_version}_variant_{variant}'
+
+
 env = build_env(args.algorithm, variant, data_dir)
 
 
@@ -155,7 +160,6 @@ def train_dqn(env):
         if hasattr(network, 'epsilon_decay_steps'):
             network.epsilon_decay_steps = network.num_episodes * 0.8
     model_version = args.model_version
-    env_name = getattr(env, 'env_name', f'{args.algorithm}.')
     note = f'algorithm: {args.algorithm}, environment: {env.__class__.__name__}'
     ##----------------------------------##
 
@@ -165,7 +169,8 @@ def train_dqn(env):
     output_interval = 20
 
     # best model tracking
-    model_path = os.path.join(model_dir, f'{network.file_name}{env_name}{model_version}_variant_{env.variant}.pt')
+    run_name = build_run_name(args.algorithm, model_version, env.variant)
+    model_path = os.path.join(model_dir, f'{run_name}.pt')
     best_vali_rew = -float('inf')
     # print info
     print(f'Training {network.network_name} on Variant {env.variant}')
@@ -175,7 +180,6 @@ def train_dqn(env):
     num_validation_episodes = 100 # validation episodes in each validation phase
 
     # file protection
-    run_name = f'{network.file_name}{env_name}{model_version}_variant_{env.variant}'
     log_dir = os.path.join(log_root_dir, run_name)
     if os.path.exists(model_path) or os.path.exists(log_dir):
         raise FileExistsError(
@@ -311,7 +315,8 @@ def train_ppo(env):
     output_interval = 20
 
     # best model tracking
-    model_path = os.path.join(model_dir, f'{network.file_name}{model_version}_variant_{env.variant}.pt')
+    run_name = build_run_name(args.algorithm, model_version, env.variant)
+    model_path = os.path.join(model_dir, f'{run_name}.pt')
     best_vali_rew = -float('inf')
 
     # print info
@@ -322,7 +327,6 @@ def train_ppo(env):
     num_validation_episodes = 100 # validation episodes in each validation phase
 
     # file protection
-    run_name = f'{network.file_name}{model_version}_variant_{env.variant}'
     log_dir = os.path.join(log_root_dir, run_name)
     if os.path.exists(model_path) or os.path.exists(log_dir):
         raise FileExistsError(

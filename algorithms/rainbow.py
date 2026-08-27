@@ -94,7 +94,7 @@ class rainbow_dqn:
         self.env = env
         self.variant = self.env.variant
         self.data_dir = self.env.data_dir
-        self.file_name = f'DQN_v8.'
+        self.file_name = 'rainbow_dqn'
         self.network_name = 'Rainbow DQN Network (Version 8)'
         self.training_step = 0
 

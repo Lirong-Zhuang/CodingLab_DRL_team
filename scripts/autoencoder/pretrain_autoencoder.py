@@ -16,9 +16,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from scripts.autoencoder.autoencoder_model import build_autoencoder
-from environments.environment_v5 import Environment_v5
-from environments.environment_v9 import Environment_v9
-from environments.rainbow_environment import Environment_v11
+from environments.rainbow_environment import Environment as RainbowEnvironment
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -238,13 +236,8 @@ def train_autoencoder(args):
         f"validation={len(val_episodes)} test={len(test_episodes)}"
     )
 
-    env_classes = {
-        5: Environment_v5,
-        9: Environment_v9,
-        11: Environment_v11,
-    }
-    train_env = env_classes[args.env_version](variant=args.variant, data_dir=args.data_dir)
-    val_env = env_classes[args.env_version](variant=args.variant, data_dir=args.data_dir)
+    train_env = RainbowEnvironment(variant=args.variant, data_dir=args.data_dir)
+    val_env = RainbowEnvironment(variant=args.variant, data_dir=args.data_dir)
     initial_obs = train_env.reset("training")
     in_channels = initial_obs.shape[0]
 
@@ -398,7 +391,7 @@ def train_autoencoder(args):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_version", type=int, default=11, choices=[5, 9, 11])
+    parser.add_argument("--env_version", type=int, default=11, choices=[11])
     parser.add_argument("--variant", type=int, default=0, choices=[0, 1, 2])
     parser.add_argument("--model_version", type=int, default=1)
     parser.add_argument("--data_dir", type=str, default="./data")
@@ -434,12 +427,7 @@ def parse_args():
     if args.feature_channels is not None:
         args.feature_dim = args.feature_channels
     if args.channel_weights is None:
-        if args.env_version == 5:
-            args.channel_weights = [4.0, 1.0, 1.0, 4.0, 2.0]
-        elif args.env_version == 9:
-            args.channel_weights = [4.0, 1.0, 1.0, 4.0, 2.0, 2.0]
-        else:
-            args.channel_weights = [4.0, 1.0, 1.0, 4.0, 2.0, 2.0, 2.0]
+        args.channel_weights = [4.0, 1.0, 1.0, 4.0, 2.0, 2.0, 2.0]
     return args
 
 

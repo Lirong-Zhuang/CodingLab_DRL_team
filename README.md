@@ -17,7 +17,7 @@ The release sources are pinned to the latest team branches fetched on 27 August 
 | Lejla PPO | `lejla` | `ad660fd6` | hybrid actor-critic with BC warm start |
 | Ashley DQN | `dev_ashley_new` | `e7a73956` | CNN-v2; action-masked CNN-v2 for Variant 2 |
 
-The `environments/environment.py`, `greedy.py` and `test_policy.py` files are retained directly from `main`, with only the two imports updated after moving the environment into its package. The DQN and PPO implementations are copied directly from the listed team revisions. Their release changes are limited to package-relative import paths, the shared `main.py` integration, and Ashley's `eisode_steps` typo, which otherwise prevents CNN-v2 from starting. With the Rainbow author's authorization, `algorithms/rainbow.py` keeps only the original v8 agent and its required classes, and renames the agent class to `rainbow_dqn` without changing its hyperparameters or training logic.
+The `environments/environment.py` and `greedy.py` files are retained directly from `main`, with only the import updated after moving the environment into its package. The original `test_policy.py` loop is completed with the three release environments, policy construction and checkpoint loading. The DQN and PPO implementations are copied directly from the listed team revisions. Their release changes are limited to package-relative import paths, the shared `main.py` integration, and Ashley's `eisode_steps` typo, which otherwise prevents CNN-v2 from starting. With the Rainbow author's authorization, `algorithms/rainbow.py` keeps only the original v8 agent and its required classes, and renames the agent class to `rainbow_dqn` without changing its hyperparameters or training logic.
 
 ## Final results
 
@@ -45,8 +45,6 @@ The selected model for each variant outperformed the greedy baseline on the fina
 |-- environments/
 |   |-- environment.py
 |   |-- dqn_environment.py
-|   |-- environment_v5.py
-|   |-- environment_v9.py
 |   |-- ppo_environment.py
 |   `-- rainbow_environment.py
 |-- scripts/
@@ -61,13 +59,13 @@ The selected model for each variant outperformed the greedy baseline on the fina
     `-- variant_2/
 ```
 
-`Environment_v11` is the final v11 environment from the Rainbow development line. It produces a `7 x 5 x 5` CNN observation containing agent position, load, remaining time, item presence, item lifetime, reachability and heuristic value.
+The Rainbow `Environment` is derived from the final environment on the Rainbow development line. It produces a `7 x 5 x 5` CNN observation containing agent position, load, remaining time, item presence, item lifetime, reachability and heuristic value.
 
 Each algorithm uses its corresponding environment automatically:
 
 - Ashley's `Environment` provides the final seven-channel CNN observation. Variant 2 automatically uses the final legal-action-masked CNN-v2 agent.
 - Lejla's `Environment` provides the engineered state features. The latest hybrid actor-critic is the default; `cnn` and `mlp` ablations are also available.
-- Lirong's `Environment_v11` provides the final v11 seven-channel observations used by Rainbow.
+- Lirong's Rainbow `Environment` provides the final seven-channel observations used by Rainbow.
 
 The shared entry point uses one Rainbow agent:
 
@@ -81,7 +79,7 @@ Python 3.11 is recommended.
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
@@ -105,7 +103,7 @@ All training commands must be run while the `.venv` virtual environment is activ
 
 ```powershell
 # Windows PowerShell
-.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 ```
 
 ```bash
@@ -126,10 +124,38 @@ python main.py --algorithm rainbow --variant 0 --num_episodes 10000
 python main.py --algorithm ppo --variant 0 --num_episodes 10000
 ```
 
-Variants `0`, `1` and `2` are supported. Change `--model_version` when repeating a run with the same configuration. Runtime checkpoints and TensorBoard files are written to `outputs/`.
+Variants `0`, `1` and `2` are supported. Change `--model_version` when repeating a run with the same configuration. Checkpoints are named `dqn_vX_variant_N.pt`, `rainbow_dqn_vX_variant_N.pt` or `ppo_vX_variant_N.pt` under `outputs/checkpoints/`; matching TensorBoard directories are created under `outputs/tensorboard/`.
 
 Lejla's latest PPO defaults to the `hybrid` network. Use `--ppo_architecture cnn` or `--ppo_architecture mlp` for the two final ablations. Behavioural cloning defaults to 2,000 demonstration episodes and 20 epochs; `--bc_episodes` and `--bc_epochs` can override these values. For a quick installation smoke test, use:
 
 ```powershell
 python main.py --algorithm ppo --variant 0 --num_episodes 1 --bc_episodes 0
 ```
+
+To verify every training entry point after installation, run:
+
+```powershell
+python main.py --algorithm dqn --variant 0 --num_episodes 1 --model_version 0
+python main.py --algorithm dqn --variant 1 --num_episodes 1 --model_version 0
+python main.py --algorithm dqn --variant 2 --num_episodes 1 --model_version 0
+python main.py --algorithm rainbow --variant 0 --num_episodes 1 --model_version 0
+python main.py --algorithm rainbow --variant 1 --num_episodes 1 --model_version 0
+python main.py --algorithm rainbow --variant 2 --num_episodes 1 --model_version 0
+python main.py --algorithm ppo --variant 0 --num_episodes 1 --bc_episodes 0 --model_version 0
+python main.py --algorithm ppo --variant 1 --num_episodes 1 --bc_episodes 0 --model_version 0
+python main.py --algorithm ppo --variant 2 --num_episodes 1 --bc_episodes 0 --model_version 0
+```
+
+These one-episode commands only verify that training starts; a checkpoint is not expected before the first validation phase. Use a different `--model_version` when repeating them because each run creates a TensorBoard directory under `outputs/`.
+
+## Test
+
+`test_policy.py` selects the same environment and model class as `main.py`. DQN and Rainbow checkpoints contain Q-network weights; PPO checkpoints also record their architecture. Use `--ppo_architecture` only when testing a raw PPO state dictionary without architecture metadata.
+
+```powershell
+python test_policy.py --algorithm dqn --variant 0 --model_path PATH_TO_DQN_MODEL.pt
+python test_policy.py --algorithm rainbow --variant 0 --model_path PATH_TO_RAINBOW_MODEL.pt
+python test_policy.py --algorithm ppo --variant 0 --model_path PATH_TO_PPO_MODEL.pt
+```
+
+Each command evaluates 100 test episodes by default and prints the average reward. Use `--num_test_episodes 1` for a quick invocation check. The original greedy baseline remains available with `python greedy.py`.
