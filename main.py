@@ -3,9 +3,9 @@ import time
 from torch.utils.tensorboard import SummaryWriter
 
 from algorithms import dqn, ppo, rainbow
-from environments.dqn_environment import DQNEnvironment
-from environments.ppo_environment import PPOEnvironment
-from environments.rainbow_cnn_environment import RainbowCNNEnvironment
+from environments.dqn_environment import Environment as DQNEnvironment
+from environments.ppo_environment import Environment as PPOEnvironment
+from environments.rainbow_environment import Environment_v11 as RainbowEnvironment
 
 
 # Edit these values before running this file directly.
@@ -15,9 +15,9 @@ DATA_DIR = './data'
 ALGORITHM = "rainbow"
 MODEL_VERSION = 1
 NUM_EPISODES = 10000
-ENCODER_PATH = None
-FREEZE_ENCODER = False
-ENCODER_TYPE = "cnn"  # Ignored by the hybrid network.
+PPO_ARCHITECTURE = "hybrid"
+BC_EPISODES = 2000
+BC_EPOCHS = 20
 
 
 class Config:
@@ -27,9 +27,9 @@ class Config:
     algorithm = ALGORITHM
     model_version = MODEL_VERSION
     num_episodes = NUM_EPISODES
-    encoder_path = ENCODER_PATH
-    freeze_encoder = FREEZE_ENCODER
-    encoder_type = ENCODER_TYPE
+    ppo_architecture = PPO_ARCHITECTURE
+    bc_episodes = BC_EPISODES
+    bc_epochs = BC_EPOCHS
 
 
 def parse_args():
@@ -41,13 +41,18 @@ def parse_args():
         "--algorithm",
         type=str,
         default=ALGORITHM,
-        choices=["dqn", "rainbow", "rainbow_encoder", "ppo"],
+        choices=["dqn", "rainbow", "ppo"],
     )
     parser.add_argument("--model_version", type=int, default=MODEL_VERSION)
     parser.add_argument("--num_episodes", type=int, default=NUM_EPISODES)
-    parser.add_argument("--encoder_path", type=str, default=ENCODER_PATH)
-    parser.add_argument("--freeze_encoder", action="store_true", default=FREEZE_ENCODER)
-    parser.add_argument("--encoder_type", type=str, default=ENCODER_TYPE, choices=["cnn", "lenet5", "alexnet8", "resnet18"])
+    parser.add_argument(
+        "--ppo_architecture",
+        type=str,
+        default=PPO_ARCHITECTURE,
+        choices=["hybrid", "cnn", "mlp"],
+    )
+    parser.add_argument("--bc_episodes", type=int, default=BC_EPISODES)
+    parser.add_argument("--bc_epochs", type=int, default=BC_EPOCHS)
     return parser.parse_args()
 
 
@@ -91,25 +96,15 @@ def build_env(algorithm, variant, data_dir):
         return PPOEnvironment(variant, data_dir)
     if algorithm == "dqn":
         return DQNEnvironment(variant, data_dir)
-    return RainbowCNNEnvironment(variant, data_dir)
+    return RainbowEnvironment(variant, data_dir)
 
 
 def build_dqn_network(algorithm, env):
-    network_classes = {
-        "dqn": dqn.DQN_CNN_v5,
-        "rainbow": rainbow.RainbowDQN,
-    }
-    if algorithm == "rainbow_encoder":
-        encoder_path = args.encoder_path
-        if isinstance(encoder_path, str) and encoder_path.lower() in {"", "none", "null"}:
-            encoder_path = None
-        return rainbow.EncoderDecoderRainbowDQN(
-            env,
-            encoder_path=encoder_path,
-            freeze_encoder=args.freeze_encoder,
-            encoder_type=args.encoder_type,
-        )
-    return network_classes[algorithm](env)
+    if algorithm == "dqn":
+        if env.variant == 2:
+            return dqn.DQN_CNN_v2_variant_2_action_masking(env)
+        return dqn.DQN_CNN_v2(env)
+    return rainbow.rainbow_dqn(env)
 
 
 env = build_env(args.algorithm, variant, data_dir)
@@ -160,11 +155,8 @@ def train_dqn(env):
         if hasattr(network, 'epsilon_decay_steps'):
             network.epsilon_decay_steps = network.num_episodes * 0.8
     model_version = args.model_version
-    note = (
-        f'algorithm: {args.algorithm}, environment: {env.__class__.__name__}, '
-        f'encoder_type: {args.encoder_type}, encoder_path: {args.encoder_path}, '
-        f'freeze_encoder: {args.freeze_encoder}'
-    )
+    env_name = getattr(env, 'env_name', f'{args.algorithm}.')
+    note = f'algorithm: {args.algorithm}, environment: {env.__class__.__name__}'
     ##----------------------------------##
 
     start_time = time.time()
@@ -173,7 +165,7 @@ def train_dqn(env):
     output_interval = 20
 
     # best model tracking
-    model_path = os.path.join(model_dir, f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}.pt')
+    model_path = os.path.join(model_dir, f'{network.file_name}{env_name}{model_version}_variant_{env.variant}.pt')
     best_vali_rew = -float('inf')
     # print info
     print(f'Training {network.network_name} on Variant {env.variant}')
@@ -183,7 +175,7 @@ def train_dqn(env):
     num_validation_episodes = 100 # validation episodes in each validation phase
 
     # file protection
-    run_name = f'{network.file_name}{env.env_name}{model_version}_variant_{env.variant}'
+    run_name = f'{network.file_name}{env_name}{model_version}_variant_{env.variant}'
     log_dir = os.path.join(log_root_dir, run_name)
     if os.path.exists(model_path) or os.path.exists(log_dir):
         raise FileExistsError(
@@ -302,11 +294,16 @@ def validate_ppo(env, network, num_validation_episodes):
 def train_ppo(env):
 
     ##--------Version Information--------##
-    network = ppo.PPO_v1(env)
+    network = ppo.PPO_v1(env, architecture=args.ppo_architecture)
     network.num_episodes = args.num_episodes
+    network.bc_episodes = args.bc_episodes
+    network.bc_epochs = args.bc_epochs
     rollout_episodes = 10
     model_version = args.model_version
-    note = "Lejla PPO with behavioural-cloning warm start"
+    note = (
+        "Lejla PPO with behavioural-cloning warm start; "
+        f"architecture: {args.ppo_architecture}"
+    )
     ##----------------------------------##
 
     start_time = time.time()

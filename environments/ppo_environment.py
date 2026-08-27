@@ -14,10 +14,9 @@ from copy import deepcopy
 from itertools import compress
 
 
-class PPOEnvironment(object):
+class Environment(object):
     def __init__(self, variant, data_dir):
         self.variant = variant
-        self.env_name = "ppo."
         self.vertical_cell_count = 5
         self.horizontal_cell_count = 5
         self.vertical_idx_target = 2
@@ -28,6 +27,7 @@ class PPOEnvironment(object):
         self.reward = 25 if self.variant == 2 else 15
         self.data_dir = data_dir
         self.feature_mode = "all"
+        self.reward_shaping = True
 
         self.training_episodes = pd.read_csv(self.data_dir + f'/variant_{self.variant}/training_episodes.csv')
         self.training_episodes = self.training_episodes.training_episodes.tolist()
@@ -146,13 +146,13 @@ class PPOEnvironment(object):
             new_dist_to_nearest_item = None
 
         # Reward shaping
-        if self.agent_load > 0:
+        if self.reward_shaping and self.agent_load > 0:
             # If carrying item, reward moving closer to target
             if new_dist_to_target < old_dist_to_target:
                 rew += 0.2
             elif new_dist_to_target > old_dist_to_target:
                 rew -= 0.2
-        else:
+        elif self.reward_shaping:
             # If not carrying item, reward moving closer to nearest item
             if old_dist_to_nearest_item is not None and new_dist_to_nearest_item is not None:
                 if new_dist_to_nearest_item < old_dist_to_nearest_item:

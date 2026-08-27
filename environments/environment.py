@@ -26,7 +26,6 @@ class Environment(object):
         self.max_response_time = 15 if self.variant == 2 else 10
         self.reward = 25 if self.variant == 2 else 15
         self.data_dir = data_dir
-        self.env_name = "1."
 
         self.training_episodes = pd.read_csv(self.data_dir + f'/variant_{self.variant}/training_episodes.csv')
         self.training_episodes = self.training_episodes.training_episodes.tolist()
@@ -146,24 +145,7 @@ class Environment(object):
 
     # TODO: implement function that gives the input features for the neural network(s)
     #       based on the current state of the environment
-    # Using one-hot and multi-hot to realize the fixed input size. Dimension of obs is 54. Numbers are normalized
     def get_obs(self):
-        
-        # agent_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count # 25-dimensional one-hot agent location as input
-        # agent_loc_obs[self.agent_loc[0] * self.horizontal_cell_count + self.agent_loc[1]] = 1
-        agent_loc_obs = [self.agent_loc[0] / self.vertical_cell_count, self.agent_loc[1] / self.horizontal_cell_count]  # 2-dimensional agent location as input 
+        ...
 
-        item_loc_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
-        item_times_obs = [0] * self.vertical_cell_count * self.horizontal_cell_count
-
-        for item_loc, item_time in zip(self.item_locs, self.item_times):
-            idx = item_loc[0] * self.horizontal_cell_count + item_loc[1]
-            item_loc_obs[idx] = 1
-            item_times_obs[idx] = item_time / self.max_response_time
-
-        step_count_obs = [self.step_count / self.episode_steps]
-        agent_load_obs = [self.agent_load / self.agent_capacity]
-
-        obs = step_count_obs + agent_loc_obs + agent_load_obs + item_loc_obs + item_times_obs
-
-        return obs
+        return ...

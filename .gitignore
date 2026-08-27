@@ -8,7 +8,6 @@ __pycache__/
 
 # Virtual environment
 .venv/
-codinglab_drl/
 venv/
 env/
 
@@ -18,17 +17,18 @@ env/
 # Runtime / output files
 *.json
 videos/
-outputs/
 
 # Model outputs
 models/
 models2/
 models3/
 autoencoder/autoencoder_models/
+demonstrations/*.pkl
 
-# Autoencoder runtime outputs
-autoencoder/autoencoder_logs/
-autoencoder/autoencoder_models/
+# Keep only TensorBoard event files from autoencoder logs
+autoencoder/autoencoder_logs/*
+!autoencoder/autoencoder_logs/**/
+!autoencoder/autoencoder_logs/**/events.out.tfevents.*
 
 # Local autoencoder smoke/check outputs
 autoencoder/_*/

@@ -8,6 +8,17 @@ This repository is the final course release combining the work of the three team
 
 The release intentionally keeps the original `main.py` training structure. Experiment logs, trained models, intermediate statistics and visualizations are not included.
 
+The release sources are pinned to the latest team branches fetched on 27 August 2026:
+
+| Component | Team branch | Source revision | Release default |
+|:---|:---|:---|:---|
+| Course scaffold | `main` | `bdbfba73` | original environment, greedy baseline and test template |
+| Lirong Rainbow | `dev_zhuang` | `e7c7face` | final Rainbow CNN |
+| Lejla PPO | `lejla` | `ad660fd6` | hybrid actor-critic with BC warm start |
+| Ashley DQN | `dev_ashley_new` | `e7a73956` | CNN-v2; action-masked CNN-v2 for Variant 2 |
+
+The `environments/environment.py`, `greedy.py` and `test_policy.py` files are retained directly from `main`, with only the two imports updated after moving the environment into its package. The DQN and PPO implementations are copied directly from the listed team revisions. Their release changes are limited to package-relative import paths, the shared `main.py` integration, and Ashley's `eisode_steps` typo, which otherwise prevents CNN-v2 from starting. With the Rainbow author's authorization, `algorithms/rainbow.py` keeps only the original v8 agent and its required classes, and renames the agent class to `rainbow_dqn` without changing its hyperparameters or training logic.
+
 ## Final results
 
 The selected model for each variant outperformed the greedy baseline on the final test set:
@@ -23,6 +34,8 @@ The selected model for each variant outperformed the greedy baseline on the fina
 ```text
 .
 |-- main.py
+|-- greedy.py
+|-- test_policy.py
 |-- requirements.txt
 |-- algorithms/
 |   |-- dqn.py
@@ -30,32 +43,35 @@ The selected model for each variant outperformed the greedy baseline on the fina
 |   |-- pretrained_model.py
 |   `-- ppo.py
 |-- environments/
-|   |-- base_environment.py
+|   |-- environment.py
 |   |-- dqn_environment.py
+|   |-- environment_v5.py
+|   |-- environment_v9.py
 |   |-- ppo_environment.py
-|   |-- spatial_distribution.py
-|   `-- rainbow_cnn_environment.py
-|-- autoencoder/
-|   |-- autoencoder_model.py
-|   `-- pretrain_autoencoder.py
+|   `-- rainbow_environment.py
+|-- scripts/
+|   |-- autoencoder/
+|   |   |-- autoencoder_model.py
+|   |   `-- pretrain_autoencoder.py
+|   `-- dqn/
+|       `-- spatial_distribution.py
 `-- data/
     |-- variant_0/
     |-- variant_1/
     `-- variant_2/
 ```
 
-`RainbowCNNEnvironment` is the final v11 environment from the Rainbow development line. It produces a `7 x 5 x 5` CNN observation containing agent position, load, remaining time, item presence, item lifetime, reachability and heuristic value.
+`Environment_v11` is the final v11 environment from the Rainbow development line. It produces a `7 x 5 x 5` CNN observation containing agent position, load, remaining time, item presence, item lifetime, reachability and heuristic value.
 
 Each algorithm uses its corresponding environment automatically:
 
-- `DQNEnvironment` provides the CNN observations and spatial features used by DQN.
-- `PPOEnvironment` provides the engineered state features used by PPO.
-- `RainbowCNNEnvironment` provides the final v11 seven-channel observations used by both Rainbow variants.
+- Ashley's `Environment` provides the final seven-channel CNN observation. Variant 2 automatically uses the final legal-action-masked CNN-v2 agent.
+- Lejla's `Environment` provides the engineered state features. The latest hybrid actor-critic is the default; `cnn` and `mlp` ablations are also available.
+- Lirong's `Environment_v11` provides the final v11 seven-channel observations used by Rainbow.
 
-`algorithms/rainbow.py` exposes only two training agents:
+The shared entry point uses one Rainbow agent:
 
-- `RainbowDQN`: the final end-to-end Rainbow CNN implementation, formerly called `DQN_v8`.
-- `EncoderDecoderRainbowDQN`: the former `DQN_v11`, with a separate encoder and distributional Q head. It can load and optionally freeze a pretrained encoder.
+- `rainbow_dqn`: the original `DQN_v8` end-to-end Rainbow CNN implementation under its release name.
 
 ## Create the virtual environment
 
@@ -64,8 +80,8 @@ Python 3.11 is recommended.
 ### Windows PowerShell
 
 ```powershell
-python -m venv codinglab_drl
-codinglab_drl\Scripts\Activate.ps1
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
@@ -73,60 +89,47 @@ pip install -r requirements.txt
 ### Linux or macOS
 
 ```bash
-python3 -m venv codinglab_drl
-source codinglab_drl/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-The generated `codinglab_drl/` directory is ignored by Git. It contains local dependencies only and must not be committed.
+The generated `.venv/` directory is ignored by Git. It contains local dependencies only and must not be committed.
 
 For a CUDA-enabled PyTorch installation, install the PyTorch build matching the local CUDA version before running `pip install -r requirements.txt`.
 
 ## Train
 
-All training commands must be run while the `codinglab_drl` virtual environment is activated. If a new terminal is opened, activate it again before training:
+All training commands must be run while the `.venv` virtual environment is activated. If a new terminal is opened, activate it again before training:
 
 ```powershell
 # Windows PowerShell
-codinglab_drl\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1
 ```
 
 ```bash
 # Linux or macOS
-source codinglab_drl/bin/activate
+source .venv/bin/activate
 ```
 
 After activation, all algorithms use `main.py` and the existing episode data under `data/variant_<n>`.
 
 ```powershell
-# Ashley CNN-DQN
+# Ashley CNN-DQN (CNN-v2; Variant 2 enables action masking automatically)
 python main.py --algorithm dqn --variant 0 --num_episodes 10000
 
 # Final Rainbow DQN
 python main.py --algorithm rainbow --variant 0 --num_episodes 10000
 
-# Rainbow with separate encoder and Q head
-python main.py --algorithm rainbow_encoder --variant 0 --num_episodes 10000
-
 # Lejla PPO
 python main.py --algorithm ppo --variant 0 --num_episodes 10000
 ```
 
-Variants `0`, `1` and `2` are supported. Change `--model_version` when repeating a run with the same configuration. Runtime checkpoints and TensorBoard files are written to `outputs/`, which is ignored by Git.
+Variants `0`, `1` and `2` are supported. Change `--model_version` when repeating a run with the same configuration. Runtime checkpoints and TensorBoard files are written to `outputs/`.
 
-### Train with a pretrained encoder
-
-First pretrain the autoencoder on the final Rainbow CNN environment:
+Lejla's latest PPO defaults to the `hybrid` network. Use `--ppo_architecture cnn` or `--ppo_architecture mlp` for the two final ablations. Behavioural cloning defaults to 2,000 demonstration episodes and 20 epochs; `--bc_episodes` and `--bc_epochs` can override these values. For a quick installation smoke test, use:
 
 ```powershell
-python -m autoencoder.pretrain_autoencoder --env_version 11 --variant 0
+python main.py --algorithm ppo --variant 0 --num_episodes 1 --bc_episodes 0
 ```
-
-Then pass the saved encoder checkpoint to Rainbow:
-
-```powershell
-python main.py --algorithm rainbow_encoder --variant 0 --encoder_path PATH_TO_ENCODER.pt --freeze_encoder
-```
-
-Omit `--freeze_encoder` to fine-tune the encoder during Rainbow training.

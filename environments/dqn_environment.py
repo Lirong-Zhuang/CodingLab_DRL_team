@@ -13,13 +13,12 @@ import pandas as pd
 from copy import deepcopy
 from itertools import compress
 import numpy as np
-from .spatial_distribution import compute_spatial_distribution
+from scripts.dqn.spatial_distribution import compute_spatial_distribution
 
 
-class DQNEnvironment(object):
+class Environment(object):
     def __init__(self, variant, data_dir, data_variant=None):
         self.variant = variant
-        self.env_name = "dqn."
         self.vertical_cell_count = 5
         self.horizontal_cell_count = 5
         self.vertical_idx_target = 2
@@ -62,10 +61,10 @@ class DQNEnvironment(object):
                                    (3,0), (3,1), (3,2),        (3,4),
                                    (4,0), (4,1), (4,2),        (4,4)]
 
-        _, normalized_prob, _ = compute_spatial_distribution(self.variant, './data')
+        spawn_prob, _, _ = compute_spatial_distribution(self.variant, './data')
         self.spawn_channel = np.zeros(
             (self.vertical_cell_count, self.horizontal_cell_count), dtype=np.float32)
-        for (r, c), prob in normalized_prob.items():
+        for (r, c), prob in spawn_prob.items():
             self.spawn_channel[r, c] = prob
 
 
@@ -96,7 +95,7 @@ class DQNEnvironment(object):
         self.data = pd.read_csv(self.data_dir + f'/variant_{self.data_variant}/episode_data/episode_{episode:03d}.csv',
                                 index_col=0)
 
-        return self.get_cnn_obs_distribution_variant_2()
+        return self.get_cnn_obs_distribution_variant_1()
 
     # take one environment step based on the action act
     def step(self, act):
@@ -159,7 +158,7 @@ class DQNEnvironment(object):
         self.item_times += [0] * len(new_items)
 
         # get new observation
-        next_obs = self.get_cnn_obs_distribution_variant_2()
+        next_obs = self.get_cnn_obs_distribution_variant_1()
 
         return rew, next_obs, done
 
@@ -583,7 +582,7 @@ class DQNEnvironment(object):
         # Channel 1: Target Position (Constantly sits at fixed coordinate (2, 0)) , one-hot spacial map
         grid_obs[1, self.target_loc[0], self.target_loc[1]] = 1.0
 
-        # Channel 2 & 3: Item Position & Time Left
+        # Channel 2 & 3: Item Position & Time Constraint (both item time left, and global time step left)
         if len(self.item_locs) > 0:
             locs_array = np.array(self.item_locs, dtype=np.int32)  # Shape: (N, 2)
             times_array = np.array(self.item_times, dtype=np.float32)  # Shape: (N,)
@@ -595,11 +594,9 @@ class DQNEnvironment(object):
             time_constraint = np.minimum(steps_till_item_expires, steps_till_episode_ends)
             grid_obs[3, vertical_indices, horizontal_indices] = time_constraint / self.max_response_time
 
-
-        # Channel 4: Loading Capacity Status
-        # Similar set-up as time left, when the agent is carrying nothing, the capacity is 1.0,
-        # when it carries 1 item, it's 2/3, when it carries 2 item, it's 1/3, when it carries 3, then 0.0
-        grid_obs[4, :, :] = (self.agent_capacity - self.agent_load) / self.agent_capacity
+        # Channel 4: carrying status
+        if self.agent_load > 0:
+            grid_obs[4, :, :] = 1.0
 
 
         # Channel 5: Pre-calculated Item Spatial Distribution
@@ -616,4 +613,160 @@ class DQNEnvironment(object):
 
         return grid_obs
 
+    def get_cnn_obs_comprehensive_variant_2(self):
+        # Initialize a 10-channel, 5x5 float32 array with zeros
+        # Shape: (Channels, Height, Width) -> (10, 5, 5)
+        grid_obs = np.zeros((10, self.vertical_cell_count, self.horizontal_cell_count), dtype=np.float32)
+
+        # Channel 0: Agent Position, one-hot spacial map
+        grid_obs[0, self.agent_loc[0], self.agent_loc[1]] = 1.0
+
+        # Channel 1: Target Position (Constantly sits at fixed coordinate (2, 0)) , one-hot spacial map
+        grid_obs[1, self.target_loc[0], self.target_loc[1]] = 1.0
+
+        # Channel 2 & 3: Item Position & Time Constraint (both item time left, and global time step left)
+        # Channel 4: Reachability
+        # Channel 5: item value
+        if len(self.item_locs) > 0:
+            locs_array = np.array(self.item_locs, dtype=np.int32)  # Shape: (N, 2)
+            times_array = np.array(self.item_times, dtype=np.float32)  # Shape: (N,)
+            vertical_indices = locs_array[:, 0]
+            horizontal_indices = locs_array[:, 1]
+            grid_obs[2, vertical_indices, horizontal_indices] = 1.0
+            steps_till_item_expires = self.max_response_time - times_array
+            steps_till_episode_ends = self.episode_steps - self.step_count
+            time_constraint = np.minimum(steps_till_item_expires, steps_till_episode_ends)
+            grid_obs[3, vertical_indices, horizontal_indices] = time_constraint / self.max_response_time
+            for i, (item_loc, item_time) in enumerate(zip(self.item_locs, self.item_times)):
+                dist_agent_item = self.get_shortest_distance(self.agent_loc, item_loc)
+                dist_item_target = self.get_shortest_distance(item_loc, self.target_loc)
+
+                remaining_item_steps = self.max_response_time - item_time
+                reachability = (remaining_item_steps - dist_agent_item) / self.max_response_time
+                reachability = max(0.0, min(1.0, reachability))
+                grid_obs[4, vertical_indices[i], horizontal_indices[i]] = reachability
+
+                heuristic_value = (self.reward - dist_agent_item - dist_item_target) / self.reward
+                heuristic_value = max(0.0, min(1.0, heuristic_value))
+                grid_obs[5, vertical_indices[i], horizontal_indices[i]] = heuristic_value
+
+
+        # Channel 6: carrying status
+        if self.agent_load > 0:
+            grid_obs[6, :, :] = 1.0
+
+
+        # Channel 7: Pre-calculated Item Spatial Distribution
+        grid_obs[7, :, :] = self.spawn_channel
+
+        # Channel 8: Global time left
+        grid_obs[8, :, :] = (self.episode_steps - self.step_count) / self.episode_steps
+
+        # Channel 9: eligible cell representation
+        np_eligible = np.array(self.eligible_cells, dtype=np.int32)
+        eligible_vertical_indices = np_eligible[:, 0]
+        eligible_horizontal_indices = np_eligible[:, 1]
+        grid_obs[9, eligible_vertical_indices, eligible_horizontal_indices] = 1.0
+
+        return grid_obs
+
+    def get_cnn_obs_comprehensive_variant_0(self):
+        # Initialize a 9-channel, 5x5 float32 array with zeros
+        # Shape: (Channels, Height, Width) -> (9, 5, 5)
+        grid_obs = np.zeros((9, self.vertical_cell_count, self.horizontal_cell_count), dtype=np.float32)
+
+        # Channel 0: Agent Position, one-hot spacial map
+        grid_obs[0, self.agent_loc[0], self.agent_loc[1]] = 1.0
+
+        # Channel 1: Target Position (Constantly sits at fixed coordinate (2, 0)) , one-hot spacial map
+        grid_obs[1, self.target_loc[0], self.target_loc[1]] = 1.0
+
+        # Channel 2 & 3: Item Position & Time Constraint (both item time left, and global time step left)
+        # Channel 4: Reachability
+        # Channel 5: item value
+        if len(self.item_locs) > 0:
+            locs_array = np.array(self.item_locs, dtype=np.int32)  # Shape: (N, 2)
+            times_array = np.array(self.item_times, dtype=np.float32)  # Shape: (N,)
+            vertical_indices = locs_array[:, 0]
+            horizontal_indices = locs_array[:, 1]
+            grid_obs[2, vertical_indices, horizontal_indices] = 1.0
+            steps_till_item_expires = self.max_response_time - times_array
+            steps_till_episode_ends = self.episode_steps - self.step_count
+            time_constraint = np.minimum(steps_till_item_expires, steps_till_episode_ends)
+            grid_obs[3, vertical_indices, horizontal_indices] = time_constraint / self.max_response_time
+            for i, (item_loc, item_time) in enumerate(zip(self.item_locs, self.item_times)):
+                dist_agent_item = self.get_shortest_distance(self.agent_loc, item_loc)
+                dist_item_target = self.get_shortest_distance(item_loc, self.target_loc)
+
+                remaining_item_steps = self.max_response_time - item_time
+                reachability = (remaining_item_steps - dist_agent_item) / self.max_response_time
+                reachability = max(0.0, min(1.0, reachability))
+                grid_obs[4, vertical_indices[i], horizontal_indices[i]] = reachability
+
+                heuristic_value = (self.reward - dist_agent_item - dist_item_target) / self.reward
+                heuristic_value = max(0.0, min(1.0, heuristic_value))
+                grid_obs[5, vertical_indices[i], horizontal_indices[i]] = heuristic_value
+
+
+        # Channel 6: carrying status
+        if self.agent_load > 0:
+            grid_obs[6, :, :] = 1.0
+
+
+        # Channel 7: Pre-calculated Item Spatial Distribution
+        grid_obs[7, :, :] = self.spawn_channel
+
+        # Channel 8: Global time left
+        grid_obs[8, :, :] = (self.episode_steps - self.step_count) / self.episode_steps
+
+        return grid_obs
+
+    def get_cnn_obs_comprehensive_variant_1(self):
+        # Initialize a 9-channel, 5x5 float32 array with zeros
+        # Shape: (Channels, Height, Width) -> (9, 5, 5)
+        grid_obs = np.zeros((9, self.vertical_cell_count, self.horizontal_cell_count), dtype=np.float32)
+
+        # Channel 0: Agent Position, one-hot spacial map
+        grid_obs[0, self.agent_loc[0], self.agent_loc[1]] = 1.0
+
+        # Channel 1: Target Position (Constantly sits at fixed coordinate (2, 0)) , one-hot spacial map
+        grid_obs[1, self.target_loc[0], self.target_loc[1]] = 1.0
+
+        # Channel 2 & 3: Item Position & Time Constraint (both item time left, and global time step left)
+        # Channel 4: Reachability
+        # Channel 5: item value
+        if len(self.item_locs) > 0:
+            locs_array = np.array(self.item_locs, dtype=np.int32)  # Shape: (N, 2)
+            times_array = np.array(self.item_times, dtype=np.float32)  # Shape: (N,)
+            vertical_indices = locs_array[:, 0]
+            horizontal_indices = locs_array[:, 1]
+            grid_obs[2, vertical_indices, horizontal_indices] = 1.0
+            steps_till_item_expires = self.max_response_time - times_array
+            steps_till_episode_ends = self.episode_steps - self.step_count
+            time_constraint = np.minimum(steps_till_item_expires, steps_till_episode_ends)
+            grid_obs[3, vertical_indices, horizontal_indices] = time_constraint / self.max_response_time
+            for i, (item_loc, item_time) in enumerate(zip(self.item_locs, self.item_times)):
+                dist_agent_item = self.get_shortest_distance(self.agent_loc, item_loc)
+                dist_item_target = self.get_shortest_distance(item_loc, self.target_loc)
+
+                remaining_item_steps = self.max_response_time - item_time
+                reachability = (remaining_item_steps - dist_agent_item) / self.max_response_time
+                reachability = max(0.0, min(1.0, reachability))
+                grid_obs[4, vertical_indices[i], horizontal_indices[i]] = reachability
+
+                heuristic_value = (self.reward - dist_agent_item - dist_item_target) / self.reward
+                heuristic_value = max(0.0, min(1.0, heuristic_value))
+                grid_obs[5, vertical_indices[i], horizontal_indices[i]] = heuristic_value
+
+
+        # Channel 6: Loading Capacity Status
+        grid_obs[6, :, :] = (self.agent_capacity - self.agent_load) / self.agent_capacity
+
+        # Channel 7: Pre-calculated Item Spatial Distribution
+        grid_obs[7, :, :] = self.spawn_channel
+
+        # Channel 8: Global time left
+        grid_obs[8, :, :] = (self.episode_steps - self.step_count) / self.episode_steps
+
+        return grid_obs
 
