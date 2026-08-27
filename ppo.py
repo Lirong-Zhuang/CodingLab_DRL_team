@@ -140,7 +140,8 @@ class GreedyOracle:
 #   [29:54]  item urgency grid  5x5
 #   [54:62]  8 engineered scalar features
 # ---------------------------------------------------------------------------
-class ActorCritic(nn.Module):
+class HybridActorCritic(nn.Module):
+    """CNN grid encoder plus a separate MLP scalar encoder."""
     def __init__(self, obs_dim, act_dim):
         super().__init__()
 
@@ -154,10 +155,13 @@ class ActorCritic(nn.Module):
             nn.Conv2d(16, 16, kernel_size=3, padding=1), nn.ReLU(),
             nn.Flatten()    # 400
         )
-        # scalars: indices 0-3 (4) + 54-61 (8) = 12
         scalar_dim = 4 + (obs_dim - 54)
+        self.scalar_mlp = nn.Sequential(
+            nn.Linear(scalar_dim, 64), nn.ReLU(),
+            nn.Linear(64, 64), nn.ReLU(),
+        )
         self.shared = nn.Sequential(
-            nn.Linear(400 + 400 + scalar_dim, 256), nn.ReLU(),
+            nn.Linear(400 + 400 + 64, 256), nn.ReLU(),
             nn.Linear(256, 128),                    nn.ReLU(),
             nn.Linear(128, 64),                     nn.ReLU(),
         )
@@ -171,9 +175,60 @@ class ActorCritic(nn.Module):
         feat = self.shared(torch.cat([
             self.cnn_presence(presence),
             self.cnn_urgency(urgency),
-            scalars
+            self.scalar_mlp(scalars)
         ], dim=-1))
         return self.actor_head(feat), self.critic_head(feat)
+
+
+class MLPActorCritic(nn.Module):
+    """Pure MLP baseline operating on the complete observation vector."""
+    def __init__(self, obs_dim, act_dim):
+        super().__init__()
+        self.shared = nn.Sequential(
+            nn.Linear(obs_dim, 256), nn.ReLU(),
+            nn.Linear(256, 128), nn.ReLU(),
+            nn.Linear(128, 64), nn.ReLU(),
+        )
+        self.actor_head = nn.Linear(64, act_dim)
+        self.critic_head = nn.Linear(64, 1)
+
+    def forward(self, obs):
+        feat = self.shared(obs)
+        return self.actor_head(feat), self.critic_head(feat)
+
+
+class CNNActorCritic(nn.Module):
+    """Pure CNN encoder; scalar state is represented as constant spatial maps."""
+    def __init__(self, obs_dim, act_dim):
+        super().__init__()
+        self.scalar_dim = 4 + (obs_dim - 54)
+        channels = 3 + self.scalar_dim  # presence, urgency, agent, scalar maps
+        self.encoder = nn.Sequential(
+            nn.Conv2d(channels, 32, 3, padding=1), nn.ReLU(),
+            nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
+            nn.Conv2d(32, 16, 3, padding=1), nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(16 * 5 * 5, 128), nn.ReLU(),
+            nn.Linear(128, 64), nn.ReLU(),
+        )
+        self.actor_head = nn.Linear(64, act_dim)
+        self.critic_head = nn.Linear(64, 1)
+
+    def forward(self, obs):
+        presence = obs[:, 4:29].view(-1, 1, 5, 5)
+        urgency = obs[:, 29:54].view(-1, 1, 5, 5)
+        agent = torch.zeros_like(presence)
+        rows = torch.round(obs[:, 1] * 4).long().clamp(0, 4)
+        cols = torch.round(obs[:, 2] * 4).long().clamp(0, 4)
+        agent[torch.arange(obs.shape[0], device=obs.device), 0, rows, cols] = 1.0
+        scalars = torch.cat([obs[:, :4], obs[:, 54:]], dim=-1)
+        scalar_maps = scalars[:, :, None, None].expand(-1, -1, 5, 5)
+        feat = self.encoder(torch.cat([presence, urgency, agent, scalar_maps], dim=1))
+        return self.actor_head(feat), self.critic_head(feat)
+
+
+# Backwards-compatible name used by older checkpoints and scripts.
+ActorCritic = HybridActorCritic
 
 
 # ---------------------------------------------------------------------------
@@ -186,12 +241,13 @@ class ActorCritic(nn.Module):
 #   4. update() contains the PPO clipped objective for optional fine-tuning.
 # ---------------------------------------------------------------------------
 class PPO_v1:
-    def __init__(self, env):
+    def __init__(self, env, architecture="hybrid"):
         self.env          = env
         self.variant      = env.variant
         self.data_dir     = env.data_dir
         self.file_name    = "PPO_v1."
-        self.network_name = "PPO Network (Version 1)"
+        self.architecture = architecture
+        self.network_name = f"PPO {architecture.upper()} Network"
 
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
@@ -219,7 +275,14 @@ class PPO_v1:
         self.value_coef         = 0.5
         self.max_grad_norm      = 0.5
 
-        self.network      = ActorCritic(self.obs_dim, self.act_dim).to(self.device)
+        networks = {
+            "hybrid": HybridActorCritic,
+            "cnn": CNNActorCritic,
+            "mlp": MLPActorCritic,
+        }
+        if architecture not in networks:
+            raise ValueError(f"Unknown architecture: {architecture}")
+        self.network = networks[architecture](self.obs_dim, self.act_dim).to(self.device)
         self.bc_optimizer = optim.Adam(self.network.parameters(), lr=self.bc_lr)
         self.optimizer    = optim.Adam(self.network.parameters(), lr=self.learning_rate)
         self.oracle       = GreedyOracle(self.variant)
@@ -386,6 +449,7 @@ class PPO_v1:
             "model_state_dict": self.network.state_dict(),
             "obs_dim": self.obs_dim, "act_dim": self.act_dim,
             "variant": self.variant, "agent": self.network_name,
+            "architecture": self.architecture,
             "gamma": self.gamma, "learning_rate": self.learning_rate,
             "clip_epsilon": self.clip_epsilon, "update_epochs": self.update_epochs,
         }, path)
@@ -396,3 +460,4 @@ class PPO_v1:
             ckpt["model_state_dict"] if "model_state_dict" in ckpt else ckpt
         )
         self.network.eval()
+
