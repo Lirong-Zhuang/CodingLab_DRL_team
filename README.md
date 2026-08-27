@@ -78,8 +78,8 @@ Python 3.11 is recommended.
 ### Windows PowerShell
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python -m venv codinglab_drl
+.\codinglab_drl\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
@@ -87,28 +87,35 @@ pip install -r requirements.txt
 ### Linux or macOS
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv codinglab_drl
+source codinglab_drl/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-The generated `.venv/` directory is ignored by Git. It contains local dependencies only and must not be committed.
+The generated `codinglab_drl/` directory is ignored by Git. It contains local dependencies only and must not be committed.
 
-For a CUDA-enabled PyTorch installation, install the PyTorch build matching the local CUDA version before running `pip install -r requirements.txt`.
+### Optional: CUDA-enabled PyTorch for GPU training
+
+If GPU training is required, replace the default PyTorch installation with the CUDA 12.8 build:
+
+```powershell
+python -m pip uninstall -y torch torchvision
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+```
 
 ## Train
 
-All training commands must be run while the `.venv` virtual environment is activated. If a new terminal is opened, activate it again before training:
+All training commands must be run while the `codinglab_drl` virtual environment is activated. If a new terminal is opened, activate it again before training:
 
 ```powershell
 # Windows PowerShell
-.\.venv\Scripts\Activate.ps1
+.\codinglab_drl\Scripts\Activate.ps1
 ```
 
 ```bash
 # Linux or macOS
-source .venv/bin/activate
+source codinglab_drl/bin/activate
 ```
 
 After activation, all algorithms use `main.py` and the existing episode data under `data/variant_<n>`.

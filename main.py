@@ -173,7 +173,13 @@ def train_dqn(env):
     model_path = os.path.join(model_dir, f'{run_name}.pt')
     best_vali_rew = -float('inf')
     # print info
-    print(f'Training {network.network_name} on Variant {env.variant}')
+    if args.algorithm == 'rainbow':
+        training_name = 'Rainbow DQN'
+    elif env.variant == 2:
+        training_name = 'DQN with Action Masking'
+    else:
+        training_name = 'DQN'
+    print(f'Training {training_name} on Variant {env.variant}')
 
     # validation info
     vali_interval = 100
@@ -320,7 +326,7 @@ def train_ppo(env):
     best_vali_rew = -float('inf')
 
     # print info
-    print(f'Training {network.network_name} on Variant {env.variant}')
+    print(f'Training PPO on Variant {env.variant}')
 
     # validation info
     vali_interval = 100
