@@ -9,7 +9,7 @@ import dqn
 def run_episode_for_visualization(env, network):
     """Runs one episode and collects frames for visualization"""
     frames = []
-    obs = env.reset('testing')
+    obs = env.reset('validation')
     total_reward = 0
 
     frames.append({
@@ -126,15 +126,14 @@ def draw_frame(ax, frame, variant):
     )
 
 if __name__ == '__main__':
-    variant = 1
-    model_path = './models/DQN_CNN_v2.2_variant_1.pt'
-    init_env = Environment(variant=variant, data_dir='./data')
-    network = dqn.DQN_CNN_v2(init_env)
+    variant = 2
+    model_path = './models/DQN_CNN_v2_variant_2_action_masking.1_variant_2.pt'
+    env = Environment(variant=variant, data_dir='./data')
+    network = dqn.DQN_CNN_v2_variant_2_action_masking(env)
     network.q_network.load_state_dict(
         torch.load(model_path, map_location=torch.device('cpu')))
     network.q_network.eval()
     network.epsilon = 0  # pure exploitation
-    vis_env = Environment(variant=variant, data_dir='./test_episodes')
     for i in range(3):
-        episode_frames = run_episode_for_visualization(vis_env, network)
-        animate_episode(episode_frames, variant, save_path=f'./visualizations/DQN_CNN_v2.2/episode_{i + 1}_variant_{variant}.gif')
+        episode_frames = run_episode_for_visualization(env, network)
+        animate_episode(episode_frames, variant, save_path=f'./visualizations/DQN_CNN_v2_variant_2_action_masking/episode_{i + 1}_variant_{variant}.gif')

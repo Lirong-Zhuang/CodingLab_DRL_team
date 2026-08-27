@@ -18,4 +18,5 @@ env/
 *.json
 
 # Model outputs
-models/
+
+demonstrations/*.pkl

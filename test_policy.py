@@ -42,10 +42,10 @@ def test_policy(env, network, model_path):
 if __name__ == '__main__':
     variant = 1
     model_path = './models/DQN_CNN_v2.2_variant_1.pt'
-    init_env = Environment(variant=variant, data_dir='./data')
-    network = dqn.DQN_CNN_v2(init_env)
-    test_env = Environment(variant=variant, data_dir='./test_episodes')  # initialize the environment
-    test_policy(test_env, network, model_path)  # test the trained policy
+    env = Environment(variant=variant, data_dir='./data')
+    network = dqn.DQN_CNN_v2(env)
+    #test_env = Environment(variant=variant, data_dir='./data')  # initialize the environment
+    test_policy(env, network, model_path)  # test the trained policy
 
 
 

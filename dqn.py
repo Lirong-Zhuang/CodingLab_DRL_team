@@ -857,7 +857,7 @@ class DQN_CNN_v2:
         print(f'Using device: {self.device}')
 
         # Hyperparameters (Kept identical to your teammate's setup)
-        self.episode_steps = self.env.episode_steps
+        self.episode_steps = self.env.eisode_steps
         self.num_episodes = 10000
         self.batch_size = 64
         self.gamma = 0.95
@@ -1448,6 +1448,317 @@ class DQN_CNN_v5:
 
         with torch.no_grad():
             target_q_values_next = self.target_network(next_obs_batch)
+            max_target_q_values_next = target_q_values_next.max(dim=1)[0]
+            target_q_values = rew_batch + (1 - done_batch) * self.gamma * max_target_q_values_next
+
+        q_values = self.q_network(obs_batch)
+        action_masks = torch.nn.functional.one_hot(act_batch, num_classes=self.act_dim)
+        q_values_for_actions = (q_values * action_masks).sum(dim=1)
+
+        loss = self.loss_fn(q_values_for_actions, target_q_values.detach())
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        return loss.item()
+
+    def store_transition(self, obs, act, rew, next_obs, done):
+        if len(self.replay_buffer) >= self.replay_buffer_capacity:
+            self.replay_buffer.pop(0)
+        # Raw NumPy arrays from your get_cnn_obs() flow into the list safely
+        self.replay_buffer.append((obs, act, rew, next_obs, done))
+
+    def ready_to_update(self):
+        return len(self.replay_buffer) >= self.min_replay_buffer_size
+
+    def update_after_episode(self, episode):
+        if episode % self.target_update_freq == 0:
+            self.target_network.load_state_dict(self.q_network.state_dict())
+
+        self.epsilon = max(
+            self.epsilon_end,
+            self.epsilon - (self.epsilon_start - self.epsilon_end) / self.epsilon_decay_steps
+        )
+
+    def save(self, model_path):
+        torch.save(self.q_network.state_dict(), model_path)
+
+class DQN_CNN_v2_variant_2_action_masking:
+    def __init__(self, env):
+        self.env = env
+        self.variant = self.env.variant
+        self.data_dir = self.env.data_dir
+        self.file_name = f'DQN_CNN_v2_variant_2_action_masking.'
+        self.network_name = 'DQN Convolutional Network Variant 2 Action Masking'
+
+        # 1. Get initial observation shape dynamically
+        initial_obs = self.env.reset('training')  # Returns shape (6, 5, 5) from get_cnn_obs()
+        self.in_channels = initial_obs.shape[0]  # 6 channels
+        self.grid_size = initial_obs.shape[1]  # 5x5 grid
+        self.act_dim = 5  # 0: nothing, 1: up, 2: right, 3: down, 4: left
+
+        # Device configuration
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f'Using device: {self.device}')
+
+        # Hyperparameters (Kept identical to your teammate's setup)
+        self.episode_steps = self.env.episode_steps
+        self.num_episodes = 10000
+        self.batch_size = 64
+        self.gamma = 0.95
+        self.learning_rate = 5e-5
+        self.epsilon_start = 1.0
+        self.epsilon_end = 0.05
+        self.epsilon_decay_steps = 4000
+        self.epsilon = self.epsilon_start
+        self.target_update_freq = 10
+
+        # Replay buffer parameters
+        self.replay_buffer_capacity = 20000
+        self.min_replay_buffer_size = 2000
+        self.replay_buffer = []
+
+        # Build networks
+        self.q_network = self.build_q_network().to(self.device)
+        self.target_network = self.build_q_network().to(self.device)
+        self.target_network.load_state_dict(self.q_network.state_dict())
+        self.target_network.eval()
+
+        self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
+        self.loss_fn = nn.MSELoss()
+
+    def build_q_network(self):
+        # Sweeping 5x5 map space using customized 16 -> 32 filters layout
+        network = nn.Sequential(
+            # Layer 1: Input (x, 5, 5) -> Output (16, 5, 5)
+            nn.Conv2d(in_channels=self.in_channels, out_channels=16, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            # Layer 2: Input (16, 5, 5) -> Output (32, 3, 3)  [Valid padding shrinks spatial dimensions to 3x3]
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            # Flatten Layer: Converts (32, 3, 3) feature map to a flat 288 vector
+            nn.Flatten(),
+            # Layer 3: Decision Dense Layer
+            nn.Linear(32 * 3 * 3, 128),
+            nn.ReLU(),
+            # Layer 4: Output Layer maps to action dimensions
+            nn.Linear(128, self.act_dim)
+        )
+        return network
+
+    def select_action(self, obs):
+        agent_loc = self.env.agent_loc
+        eligible = set(self.env.eligible_cells)
+        r, c = agent_loc
+
+        valid_actions = [0]  # stay is always eligible
+        if (r - 1, c) in eligible: valid_actions.append(1)  # up
+        if (r, c + 1) in eligible: valid_actions.append(2)  # right
+        if (r + 1, c) in eligible: valid_actions.append(3)  # down
+        if (r, c - 1) in eligible: valid_actions.append(4)  # left
+
+        if np.random.rand() < self.epsilon:
+            return np.random.choice(valid_actions)  # only explore among legal movement
+        else:
+            obs_tensor = torch.from_numpy(obs).float().unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                q_values = self.q_network(obs_tensor).squeeze()
+            mask = torch.ones(self.act_dim) * float('-inf')
+            for a in valid_actions:
+                mask[a] = 0.0
+            q_values = q_values + mask.to(self.device)
+            return int(torch.argmax(q_values).item())
+
+    def get_valid_action_mask_batch(self, obs_batch):
+        """obs_batch: (B, C, 5, 5) tensor. Returns (B, act_dim) mask of 0/-inf."""
+        batch_size = obs_batch.shape[0]
+        mask = torch.zeros(batch_size, self.act_dim, device=obs_batch.device)
+
+        agent_channel = obs_batch[:, 0, :, :]  # (B, 5, 5)
+        flat_idx = agent_channel.view(batch_size, -1).argmax(dim=1)
+        rows = flat_idx // self.grid_size
+        cols = flat_idx % self.grid_size
+
+        eligible = set(self.env.eligible_cells)
+        for i in range(batch_size):
+            r, c = rows[i].item(), cols[i].item()
+            for a, (dr, dc) in enumerate([(0, 0), (-1, 0), (0, 1), (1, 0), (0, -1)]):
+                if a != 0 and (r + dr, c + dc) not in eligible:
+                    mask[i, a] = float('-inf')
+        return mask
+
+    def optimize_model(self):
+        batch = random.sample(self.replay_buffer, self.batch_size)
+        obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = zip(*batch)
+
+        # FIX 2: Use np.stack() to pack a list of independent 3D arrays into solid blocks of shapes [128, 6, 5, 5]
+        obs_batch = torch.from_numpy(np.stack(obs_batch)).float().to(self.device)
+        act_batch = torch.LongTensor(act_batch).to(self.device)
+        rew_batch = torch.FloatTensor(rew_batch).to(self.device)
+        next_obs_batch = torch.from_numpy(np.stack(next_obs_batch)).float().to(self.device)
+        done_batch = torch.FloatTensor(done_batch).to(self.device)
+
+        with torch.no_grad():
+            target_q_values_next = self.target_network(next_obs_batch)
+            mask = self.get_valid_action_mask_batch(next_obs_batch)
+            target_q_values_next = target_q_values_next + mask
+            max_target_q_values_next = target_q_values_next.max(dim=1)[0]
+            target_q_values = rew_batch + (1 - done_batch) * self.gamma * max_target_q_values_next
+
+        q_values = self.q_network(obs_batch)
+        action_masks = torch.nn.functional.one_hot(act_batch, num_classes=self.act_dim)
+        q_values_for_actions = (q_values * action_masks).sum(dim=1)
+
+        loss = self.loss_fn(q_values_for_actions, target_q_values.detach())
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        return loss.item()
+
+    def store_transition(self, obs, act, rew, next_obs, done):
+        if len(self.replay_buffer) >= self.replay_buffer_capacity:
+            self.replay_buffer.pop(0)
+        # Raw NumPy arrays from your get_cnn_obs() flow into the list safely
+        self.replay_buffer.append((obs, act, rew, next_obs, done))
+
+    def ready_to_update(self):
+        return len(self.replay_buffer) >= self.min_replay_buffer_size
+
+    def update_after_episode(self, episode):
+        if episode % self.target_update_freq == 0:
+            self.target_network.load_state_dict(self.q_network.state_dict())
+
+        self.epsilon = max(
+            self.epsilon_end,
+            self.epsilon - (self.epsilon_start - self.epsilon_end) / self.epsilon_decay_steps
+        )
+
+    def save(self, model_path):
+        torch.save(self.q_network.state_dict(), model_path)
+
+
+class DQN_CNN_v2_variant_2_action_masking_gamma:
+    def __init__(self, env):
+        self.env = env
+        self.variant = self.env.variant
+        self.data_dir = self.env.data_dir
+        self.file_name = f'DQN_CNN_v2_variant_2_action_masking_gamma.'
+        self.network_name = 'DQN Convolutional Network Variant 2 Action Masking with Higher Gamma'
+
+        # 1. Get initial observation shape dynamically
+        initial_obs = self.env.reset('training')  # Returns shape (6, 5, 5) from get_cnn_obs()
+        self.in_channels = initial_obs.shape[0]  # 6 channels
+        self.grid_size = initial_obs.shape[1]  # 5x5 grid
+        self.act_dim = 5  # 0: nothing, 1: up, 2: right, 3: down, 4: left
+
+        # Device configuration
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f'Using device: {self.device}')
+
+        # Hyperparameters (Kept identical to your teammate's setup)
+        self.episode_steps = self.env.episode_steps
+        self.num_episodes = 10000
+        self.batch_size = 64
+        self.gamma = 0.99
+        self.learning_rate = 5e-5
+        self.epsilon_start = 1.0
+        self.epsilon_end = 0.05
+        self.epsilon_decay_steps = 4000
+        self.epsilon = self.epsilon_start
+        self.target_update_freq = 10
+
+        # Replay buffer parameters
+        self.replay_buffer_capacity = 20000
+        self.min_replay_buffer_size = 2000
+        self.replay_buffer = []
+
+        # Build networks
+        self.q_network = self.build_q_network().to(self.device)
+        self.target_network = self.build_q_network().to(self.device)
+        self.target_network.load_state_dict(self.q_network.state_dict())
+        self.target_network.eval()
+
+        self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
+        self.loss_fn = nn.MSELoss()
+
+    def build_q_network(self):
+        # Sweeping 5x5 map space using customized 16 -> 32 filters layout
+        network = nn.Sequential(
+            # Layer 1: Input (x, 5, 5) -> Output (16, 5, 5)
+            nn.Conv2d(in_channels=self.in_channels, out_channels=16, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            # Layer 2: Input (16, 5, 5) -> Output (32, 3, 3)  [Valid padding shrinks spatial dimensions to 3x3]
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            # Flatten Layer: Converts (32, 3, 3) feature map to a flat 288 vector
+            nn.Flatten(),
+            # Layer 3: Decision Dense Layer
+            nn.Linear(32 * 3 * 3, 128),
+            nn.ReLU(),
+            # Layer 4: Output Layer maps to action dimensions
+            nn.Linear(128, self.act_dim)
+        )
+        return network
+
+    def select_action(self, obs):
+        agent_loc = self.env.agent_loc
+        eligible = set(self.env.eligible_cells)
+        r, c = agent_loc
+
+        valid_actions = [0]  # stay is always eligible
+        if (r - 1, c) in eligible: valid_actions.append(1)  # up
+        if (r, c + 1) in eligible: valid_actions.append(2)  # right
+        if (r + 1, c) in eligible: valid_actions.append(3)  # down
+        if (r, c - 1) in eligible: valid_actions.append(4)  # left
+
+        if np.random.rand() < self.epsilon:
+            return np.random.choice(valid_actions)  # only explore among legal movement
+        else:
+            obs_tensor = torch.from_numpy(obs).float().unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                q_values = self.q_network(obs_tensor).squeeze()
+            mask = torch.ones(self.act_dim) * float('-inf')
+            for a in valid_actions:
+                mask[a] = 0.0
+            q_values = q_values + mask.to(self.device)
+            return int(torch.argmax(q_values).item())
+
+    def get_valid_action_mask_batch(self, obs_batch):
+        """obs_batch: (B, C, 5, 5) tensor. Returns (B, act_dim) mask of 0/-inf."""
+        batch_size = obs_batch.shape[0]
+        mask = torch.zeros(batch_size, self.act_dim, device=obs_batch.device)
+
+        agent_channel = obs_batch[:, 0, :, :]  # (B, 5, 5)
+        flat_idx = agent_channel.view(batch_size, -1).argmax(dim=1)
+        rows = flat_idx // self.grid_size
+        cols = flat_idx % self.grid_size
+
+        eligible = set(self.env.eligible_cells)
+        for i in range(batch_size):
+            r, c = rows[i].item(), cols[i].item()
+            for a, (dr, dc) in enumerate([(0, 0), (-1, 0), (0, 1), (1, 0), (0, -1)]):
+                if a != 0 and (r + dr, c + dc) not in eligible:
+                    mask[i, a] = float('-inf')
+        return mask
+
+    def optimize_model(self):
+        batch = random.sample(self.replay_buffer, self.batch_size)
+        obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = zip(*batch)
+
+        # FIX 2: Use np.stack() to pack a list of independent 3D arrays into solid blocks of shapes [128, 6, 5, 5]
+        obs_batch = torch.from_numpy(np.stack(obs_batch)).float().to(self.device)
+        act_batch = torch.LongTensor(act_batch).to(self.device)
+        rew_batch = torch.FloatTensor(rew_batch).to(self.device)
+        next_obs_batch = torch.from_numpy(np.stack(next_obs_batch)).float().to(self.device)
+        done_batch = torch.FloatTensor(done_batch).to(self.device)
+
+        with torch.no_grad():
+            target_q_values_next = self.target_network(next_obs_batch)
+            mask = self.get_valid_action_mask_batch(next_obs_batch)
+            target_q_values_next = target_q_values_next + mask
             max_target_q_values_next = target_q_values_next.max(dim=1)[0]
             target_q_values = rew_batch + (1 - done_batch) * self.gamma * max_target_q_values_next
 

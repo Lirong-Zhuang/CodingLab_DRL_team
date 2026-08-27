@@ -33,7 +33,7 @@ tf.random.set_seed(seed)
 from environment import Environment
 
 data_dir = args.data_dir  # TODO: specify relative path to data directory (e.g., './data', not './data/variant_0')
-variant = 1 # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
+variant = 2 # TODO: specify problem variant (0 for base variant, 1 for first extension, 2 for second extension)
 env = Environment(variant, data_dir)
 model_dir = './models'
 
@@ -71,8 +71,8 @@ def validate(env, network, num_validation_episodes):
 def train(env):
 
     ##--------Version Information--------##
-    network = dqn.DQN_CNN_v2(env)
-    model_version = 4
+    network = dqn.DQN_CNN_v2_variant_2_action_masking(env)
+    model_version = 1
     # note = "Architecture: 54 64 64 5"
     note = "N/A"
     ##----------------------------------##
