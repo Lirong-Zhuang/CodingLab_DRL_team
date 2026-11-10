@@ -9,7 +9,7 @@ from itertools import compress
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import dijkstra
 
-from environment import Environment
+from environments.environment import Environment
 
 
 variant = 2  # problem variant (0 for base variant, 1 for first extension, 2 for second extension)
